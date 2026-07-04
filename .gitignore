@@ -1,0 +1,14 @@
+.codex/
+.agents/
+.codex-remote-attachments/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+reports/
+.env
+*.log

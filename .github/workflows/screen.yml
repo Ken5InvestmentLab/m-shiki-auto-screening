@@ -1,0 +1,67 @@
+name: Big Money Screening
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Do not post to Discord"
+        required: false
+        default: "false"
+      allow_stale_data:
+        description: "Run even when Yahoo latest date is older than today"
+        required: false
+        default: "false"
+  schedule:
+    # 15:50 JST on weekdays. The job waits until 15:52:00 JST before screening.
+    - cron: "50 6 * * 1-5"
+
+concurrency:
+  group: big-money-screening
+  cancel-in-progress: false
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run screening
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --dry-run"
+          fi
+          if [ "${{ github.event.inputs.allow_stale_data }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --allow-stale-data"
+          fi
+          python screen_big_money.py \
+            --wait-until 15:52 \
+            --max-results 20 \
+            --retry-until-updated-minutes 20 \
+            --retry-interval-seconds 120 \
+            $EXTRA_ARGS
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: big-money-screening-report
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
