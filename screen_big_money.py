@@ -41,8 +41,9 @@ class ScreeningConfig:
     as_of_date: str | None = None
     run_at_jst: datetime | None = None
     min_turnover_yen: float = 20_000_000
-    min_turnover_ratio: float = 4.0
+    min_turnover_ratio: float = 5.0
     strong_reaction_pct: float = 0.985
+    strong_raw_to_max: float = 0.70
     strong_reaction_to_max: float = 0.70
     quiet_reaction_pct: float = 0.960
     quiet_reaction_to_max: float = 0.55
@@ -52,7 +53,7 @@ class ScreeningConfig:
     max_5d_ret: float = 0.10
     min_20d_ret: float = -0.18
     max_20d_ret: float = 0.18
-    max_price_pos_252: float = 0.72
+    max_price_pos_252: float = 0.55
     max_dd120: float = -0.05
     min_strong_close_loc: float = 0.55
     max_strong_upper_wick: float = 0.35
@@ -439,6 +440,7 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
     strong_lane = (
         common
         and quality_pct >= config.strong_reaction_pct
+        and raw_to_max >= config.strong_raw_to_max
         and quality_to_max >= config.strong_reaction_to_max
         and close_loc >= config.min_strong_close_loc
         and upper_wick <= config.max_strong_upper_wick
@@ -706,20 +708,12 @@ def render_html(result: RunResult) -> str:
 
 def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool = False) -> dict[str, Any]:
     title = "大口仕込みスクリーニング"
-    if result.candidates:
-        top_lines = [
-            f"{rank}. {candidate.code} {candidate.name} / {lane_label(candidate.lane)} / {candidate.score:.1f}"
-            for rank, candidate in enumerate(result.candidates[:5], 1)
-        ]
-        description = "スコア順の上位候補\n" + "\n".join(top_lines)
-    else:
-        description = "条件通過なし"
+    description = "条件通過なし" if not result.candidates else f"{result.posted_count}銘柄を検出"
     if data_stale:
         description = "Yahoo日足データが本日分に更新されていない可能性があります"
     fields = [
         {"name": "判定日時", "value": fmt_jst_datetime(result.generated_at_jst), "inline": True},
         {"name": "通知", "value": f"{result.posted_count}銘柄", "inline": True},
-        {"name": "データ取得", "value": f"OK {result.yahoo_ok} / Error {result.yahoo_errors}", "inline": True},
         {"name": "内訳", "value": fmt_lane_counts(result.lane_counts), "inline": False},
     ]
     if result.notes:
