@@ -1,4 +1,4 @@
-name: Big Money Screening
+name: M式自動スクリーニング
 
 on:
   workflow_dispatch:

@@ -1,6 +1,6 @@
-# Big Money Screening
+# M式自動スクリーニング
 
-東証内国株式を対象に、Yahoo Finance日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、Discord WebhookへEmbed通知します。
+東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、Discord WebhookへEmbed通知します。
 
 ## 運用
 
@@ -40,6 +40,6 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 
 ## GitHub Actions設定
 
-1. GitHubリポジトリを作成して、このリポジトリをpushします。
-2. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
-3. Actionsタブから`Big Money Screening`を手動実行して、Discord投稿とTradingViewリンクを確認します。
+1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
+2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。
+3. 平日は15:50 JSTにWorkflowが起動し、15:52 JSTまで待機してからスクリーニングします。
