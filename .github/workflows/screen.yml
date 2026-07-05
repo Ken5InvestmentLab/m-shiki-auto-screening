@@ -15,6 +15,14 @@ on:
         description: "Run even when Yahoo latest date is older than today"
         required: false
         default: "false"
+      as_of_date:
+        description: "Backtest using OHLCV bars on or before YYYY-MM-DD"
+        required: false
+        default: ""
+      run_at_jst:
+        description: "Override run timestamp, e.g. 2026-07-02T15:52:00"
+        required: false
+        default: ""
   schedule:
     # 15:50 JST on weekdays. The job waits until 15:52:00 JST before screening.
     - cron: "50 6 * * 1-5"
@@ -56,6 +64,12 @@ jobs:
           fi
           if [ "${{ github.event.inputs.allow_stale_data }}" = "true" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --allow-stale-data"
+          fi
+          if [ -n "${{ github.event.inputs.as_of_date }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --as-of-date ${{ github.event.inputs.as_of_date }}"
+          fi
+          if [ -n "${{ github.event.inputs.run_at_jst }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --run-at-jst ${{ github.event.inputs.run_at_jst }}"
           fi
           python screen_big_money.py \
             --wait-until 15:52 \

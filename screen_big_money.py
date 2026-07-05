@@ -38,6 +38,8 @@ JST = ZoneInfo("Asia/Tokyo")
 class ScreeningConfig:
     max_results: int = 20
     max_workers: int = 48
+    as_of_date: str | None = None
+    run_at_jst: datetime | None = None
     min_turnover_yen: float = 20_000_000
     min_turnover_ratio: float = 4.0
     strong_reaction_pct: float = 0.985
@@ -125,6 +127,10 @@ def now_jst() -> datetime:
     return datetime.now(JST)
 
 
+def runtime_now(config: ScreeningConfig) -> datetime:
+    return config.run_at_jst or now_jst()
+
+
 def wait_until_jst(target_hhmm: str, no_wait: bool) -> int:
     if no_wait:
         return 0
@@ -151,6 +157,24 @@ def parse_hhmm(value: str) -> tuple[int, int]:
     return hour, minute
 
 
+def parse_iso_date(value: str) -> str:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("date must be YYYY-MM-DD") from exc
+
+
+def parse_jst_datetime(value: str) -> datetime:
+    normalized = value.strip().replace(" ", "T")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("datetime must be YYYY-MM-DDTHH:MM[:SS]") from exc
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=JST)
+    return parsed.astimezone(JST)
+
+
 def safe_median(values: np.ndarray) -> float:
     valid = values[np.isfinite(values) & (values > 0)]
     return 0.0 if valid.size == 0 else float(np.median(valid))
@@ -167,6 +191,10 @@ def fmt_pct(value: float, digits: int = 1) -> str:
     return f"{value * 100:.{digits}f}%"
 
 
+def fmt_signed_pct(value: float, digits: int = 1) -> str:
+    return f"{value * 100:+.{digits}f}%"
+
+
 def fmt_oku(value_yen: float) -> str:
     return f"{value_yen / 100_000_000:.2f}億円"
 
@@ -177,6 +205,40 @@ def fmt_volume(value: float) -> str:
     if value >= 10_000:
         return f"{value / 10_000:.1f}万株"
     return f"{value:,.0f}株"
+
+
+def lane_label(lane: str) -> str:
+    return {"strong": "strong 強反応", "quiet": "quiet 静かな反応"}.get(lane, lane)
+
+
+def fmt_lane_counts(lane_counts: dict[str, int]) -> str:
+    if not lane_counts:
+        return "-"
+    return " / ".join(f"{lane_label(lane)} {count}" for lane, count in lane_counts.items())
+
+
+def fmt_jst_datetime(value: str | None) -> str:
+    if not value:
+        return "-"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=JST)
+    return parsed.astimezone(JST).strftime("%Y-%m-%d %H:%M JST")
+
+
+def embed_timestamp(value: str | None) -> str:
+    if not value:
+        return datetime.now(timezone.utc).isoformat()
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.now(timezone.utc).isoformat()
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=JST)
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def fetch_jpx_issues(url: str = JPX_LISTED_ISSUES_URL) -> tuple[str | None, list[Issue]]:
@@ -238,7 +300,7 @@ def fetch_chart(issue: Issue, config: ScreeningConfig) -> tuple[dict[str, Any] |
     return None, last_error or "fetch_failed"
 
 
-def chart_to_arrays(chart: dict[str, Any]) -> tuple[np.ndarray, dict[str, np.ndarray]] | None:
+def chart_to_arrays(chart: dict[str, Any], as_of_date: str | None = None) -> tuple[np.ndarray, dict[str, np.ndarray]] | None:
     n = min(
         len(chart["timestamp"]),
         len(chart["open"]),
@@ -256,6 +318,8 @@ def chart_to_arrays(chart: dict[str, Any]) -> tuple[np.ndarray, dict[str, np.nda
         if close <= 0 or volume <= 0 or high <= 0 or low <= 0 or high < low:
             continue
         date = datetime.fromtimestamp(chart["timestamp"][i], tz=timezone.utc).date().isoformat()
+        if as_of_date and date > as_of_date:
+            continue
         rows.append((date, open_, high, low, close, volume))
     if len(rows) < 160:
         return None
@@ -322,7 +386,7 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
     chart, error = fetch_chart(issue, config)
     if error:
         return None, None, error
-    parsed = chart_to_arrays(chart or {})
+    parsed = chart_to_arrays(chart or {}, config.as_of_date)
     if parsed is None:
         return None, None, "too_few_rows"
 
@@ -442,7 +506,8 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
 
 
 def run_screening(config: ScreeningConfig) -> RunResult:
-    started_at = now_jst().isoformat(timespec="seconds")
+    run_now = runtime_now(config)
+    started_at = run_now.isoformat(timespec="seconds")
     list_date, issues = fetch_jpx_issues()
     candidates: list[Candidate] = []
     latest_dates: dict[str, int] = {}
@@ -478,12 +543,12 @@ def run_screening(config: ScreeningConfig) -> RunResult:
 
     notes: list[str] = []
     if target_latest_date:
-        today = now_jst().date().isoformat()
-        if now_jst().weekday() < 5 and target_latest_date < today:
+        today = run_now.date().isoformat()
+        if run_now.weekday() < 5 and target_latest_date < today:
             notes.append(f"Yahoo latest market date is {target_latest_date}; today is {today}. Data may not be updated or today may be a market holiday.")
 
     return RunResult(
-        generated_at_jst=now_jst().isoformat(timespec="seconds"),
+        generated_at_jst=run_now.isoformat(timespec="seconds"),
         screening_started_at_jst=started_at,
         target_latest_date=target_latest_date,
         jpx_list_date=list_date,
@@ -641,14 +706,21 @@ def render_html(result: RunResult) -> str:
 
 def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool = False) -> dict[str, Any]:
     title = "大口仕込みスクリーニング"
-    description = "本日条件通過なし" if not result.candidates else f"{result.posted_count}銘柄を検出"
+    if result.candidates:
+        top_lines = [
+            f"{rank}. {candidate.code} {candidate.name} / {lane_label(candidate.lane)} / {candidate.score:.1f}"
+            for rank, candidate in enumerate(result.candidates[:5], 1)
+        ]
+        description = "スコア順の上位候補\n" + "\n".join(top_lines)
+    else:
+        description = "条件通過なし"
     if data_stale:
         description = "Yahoo日足データが本日分に更新されていない可能性があります"
     fields = [
-        {"name": "判定日", "value": str(result.target_latest_date or "-"), "inline": True},
-        {"name": "候補数", "value": str(result.posted_count), "inline": True},
-        {"name": "取得", "value": f"OK {result.yahoo_ok} / Error {result.yahoo_errors}", "inline": True},
-        {"name": "型", "value": ", ".join(f"{k}:{v}" for k, v in result.lane_counts.items()) or "-", "inline": True},
+        {"name": "判定日時", "value": fmt_jst_datetime(result.generated_at_jst), "inline": True},
+        {"name": "通知", "value": f"{result.posted_count}銘柄", "inline": True},
+        {"name": "データ取得", "value": f"OK {result.yahoo_ok} / Error {result.yahoo_errors}", "inline": True},
+        {"name": "内訳", "value": fmt_lane_counts(result.lane_counts), "inline": False},
     ]
     if result.notes:
         fields.append({"name": "注意", "value": "\n".join(result.notes)[:1000], "inline": False})
@@ -656,7 +728,7 @@ def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool 
         "title": title,
         "description": description,
         "color": 0xF59E0B if data_stale else 0x2DD4BF,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": embed_timestamp(result.generated_at_jst),
         "fields": fields,
         "footer": {"text": "Yahoo Finance OHLCV / JPX listed issues"},
     }
@@ -668,20 +740,27 @@ def build_candidate_embeds(candidates: list[Candidate]) -> list[dict[str, Any]]:
         color = 0x22C55E if candidate.lane == "strong" else 0xEAB308
         embeds.append(
             {
-                "title": f"#{rank} {candidate.name} ({candidate.code})",
+                "title": f"#{rank} {candidate.code} {candidate.name}",
                 "url": candidate.tradingview_url,
-                "description": f"`{candidate.lane}` / {candidate.market}",
+                "description": f"{lane_label(candidate.lane)} / {candidate.market} / スコア {candidate.score:.1f}",
                 "color": color,
                 "fields": [
-                    {"name": "終値", "value": f"{candidate.close:.1f}", "inline": True},
-                    {"name": "出来高", "value": fmt_volume(candidate.volume), "inline": True},
                     {
-                        "name": "騰落",
-                        "value": f"1D {fmt_pct(candidate.day_ret)} / 5D {fmt_pct(candidate.ret5)} / 20D {fmt_pct(candidate.ret20)}",
+                        "name": "株価",
+                        "value": f"終値 {candidate.close:.1f}\n1D {fmt_signed_pct(candidate.day_ret)}",
+                        "inline": True,
+                    },
+                    {
+                        "name": "出来高・代金",
+                        "value": f"{fmt_volume(candidate.volume)}\n{fmt_oku(candidate.turnover)}",
+                        "inline": True,
+                    },
+                    {"name": "通常比", "value": f"{candidate.turnover_ratio:.1f}x", "inline": True},
+                    {
+                        "name": "短期推移",
+                        "value": f"5D {fmt_signed_pct(candidate.ret5)} / 20D {fmt_signed_pct(candidate.ret20)}",
                         "inline": False,
                     },
-                    {"name": "売買代金", "value": fmt_oku(candidate.turnover), "inline": True},
-                    {"name": "通常比", "value": f"{candidate.turnover_ratio:.1f}x", "inline": True},
                 ],
                 "footer": {"text": "タイトルからTradingViewを開けます"},
             }
@@ -730,8 +809,9 @@ def retry_until_fresh(args: argparse.Namespace, config: ScreeningConfig) -> RunR
         attempt += 1
         print(f"screening attempt {attempt}", flush=True)
         result = run_screening(config)
-        today = now_jst().date().isoformat()
-        if args.allow_stale_data or now_jst().weekday() >= 5 or result.target_latest_date == today:
+        run_now = runtime_now(config)
+        today = run_now.date().isoformat()
+        if args.allow_stale_data or run_now.weekday() >= 5 or result.target_latest_date == today:
             return result
         if time.time() >= deadline:
             result.notes.append(f"Retry deadline reached; latest date remains {result.target_latest_date}.")
@@ -752,6 +832,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-workers", type=int, default=48)
     parser.add_argument("--min-turnover-yen", type=float, default=20_000_000)
     parser.add_argument("--output-dir", default="reports")
+    parser.add_argument("--as-of-date", type=parse_iso_date, help="Backtest using OHLCV bars on or before YYYY-MM-DD.")
+    parser.add_argument("--run-at-jst", type=parse_jst_datetime, help="Override run timestamp, e.g. 2026-07-02T15:52:00.")
     parser.add_argument("--retry-until-updated-minutes", type=int, default=20)
     parser.add_argument("--retry-interval-seconds", type=int, default=120)
     parser.add_argument("--allow-stale-data", action="store_true", help="Do not retry when latest Yahoo date is older than today.")
@@ -761,9 +843,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     delay_seconds = wait_until_jst(args.wait_until, args.no_wait)
+    as_of_date = args.as_of_date or (args.run_at_jst.date().isoformat() if args.run_at_jst else None)
     config = ScreeningConfig(
         max_results=args.max_results,
         max_workers=args.max_workers,
+        as_of_date=as_of_date,
+        run_at_jst=args.run_at_jst,
         min_turnover_yen=args.min_turnover_yen,
     )
     result = retry_until_fresh(args, config)
