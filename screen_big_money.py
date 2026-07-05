@@ -48,21 +48,24 @@ class ScreeningConfig:
     strong_reaction_to_max: float = 0.70
     quiet_reaction_pct: float = 0.960
     quiet_reaction_to_max: float = 0.55
-    min_day_ret: float = -0.06
-    max_day_ret: float = 0.06
+    min_day_ret: float = -0.02
+    max_day_ret: float = 0.04
     min_5d_ret: float = -0.10
     max_5d_ret: float = 0.10
     min_20d_ret: float = -0.18
     max_20d_ret: float = 0.18
+    max_pos20: float = 0.85
     max_price_pos_252: float = 0.55
     max_dd120: float = -0.05
+    max_pre20_range: float = 0.07
+    max_signal_range: float = 0.03
     min_strong_close_loc: float = 0.55
     max_strong_upper_wick: float = 0.35
     min_quiet_close_loc: float = 0.40
-    max_quiet_upper_wick: float = 0.40
+    max_quiet_upper_wick: float = 0.32
     max_quiet_abs_5d_ret: float = 0.055
     max_quiet_abs_20d_ret: float = 0.08
-    max_quiet_pos20: float = 0.85
+    max_quiet_pos20: float = 0.25
     yahoo_range: str = "2y"
     yahoo_interval: str = "1d"
 
@@ -433,15 +436,21 @@ def make_candidate(
     dd120 = close[i] / high120 - 1.0 if high120 > 0 else 0.0
     close_loc, upper_wick, _, _ = bar_features(open_[i], high[i], low[i], close[i])
     range_pct = (high[i] - low[i]) / close[i - 1] if i > 0 and close[i - 1] > 0 else 0.0
+    pre20_high = float(np.max(high[max(0, i - 20) : i]))
+    pre20_low = float(np.min(low[max(0, i - 20) : i]))
+    pre20_range = (pre20_high - pre20_low) / close[i - 1] if i >= 20 and close[i - 1] > 0 else 1.0
 
     common = (
         turnover[i] >= config.min_turnover_yen
         and config.min_day_ret <= day_ret <= config.max_day_ret
         and config.min_5d_ret <= ret5 <= config.max_5d_ret
         and config.min_20d_ret <= ret20 <= config.max_20d_ret
+        and pos20 <= config.max_pos20
         and pos252 <= config.max_price_pos_252
         and dd120 <= config.max_dd120
         and turnover_ratios[i] >= config.min_turnover_ratio
+        and pre20_range <= config.max_pre20_range
+        and range_pct <= config.max_signal_range
     )
     strong_lane = (
         common
