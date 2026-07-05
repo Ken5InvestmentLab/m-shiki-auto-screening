@@ -83,6 +83,7 @@ class Candidate:
     ret5: float
     ret20: float
     turnover: float
+    volume: float
     turnover_ratio: float
     volume_ratio: float
     raw_pct: float
@@ -168,6 +169,14 @@ def fmt_pct(value: float, digits: int = 1) -> str:
 
 def fmt_oku(value_yen: float) -> str:
     return f"{value_yen / 100_000_000:.2f}億円"
+
+
+def fmt_volume(value: float) -> str:
+    if value >= 100_000_000:
+        return f"{value / 100_000_000:.2f}億株"
+    if value >= 10_000:
+        return f"{value / 10_000:.1f}万株"
+    return f"{value:,.0f}株"
 
 
 def fetch_jpx_issues(url: str = JPX_LISTED_ISSUES_URL) -> tuple[str | None, list[Issue]]:
@@ -413,6 +422,7 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
             ret5=float(ret5),
             ret20=float(ret20),
             turnover=float(turnover[i]),
+            volume=float(volume[i]),
             turnover_ratio=float(turnover_ratios[i]),
             volume_ratio=float(volume_ratios[i]),
             raw_pct=float(raw_pct),
@@ -516,6 +526,7 @@ def write_outputs(result: RunResult, output_dir: Path) -> tuple[Path, Path, Path
                 "ret5_pct",
                 "ret20_pct",
                 "turnover_oku",
+                "volume",
                 "turnover_ratio",
                 "volume_ratio",
                 "raw_pct",
@@ -545,6 +556,7 @@ def write_outputs(result: RunResult, output_dir: Path) -> tuple[Path, Path, Path
                     f"{candidate.ret5 * 100:.2f}",
                     f"{candidate.ret20 * 100:.2f}",
                     f"{candidate.turnover / 100_000_000:.4f}",
+                    f"{candidate.volume:.0f}",
                     f"{candidate.turnover_ratio:.4f}",
                     f"{candidate.volume_ratio:.4f}",
                     f"{candidate.raw_pct:.4f}",
@@ -581,6 +593,7 @@ def render_html(result: RunResult) -> str:
             f"<td>{fmt_pct(candidate.ret5)}</td>"
             f"<td>{fmt_pct(candidate.ret20)}</td>"
             f"<td>{fmt_oku(candidate.turnover)}</td>"
+            f"<td>{fmt_volume(candidate.volume)}</td>"
             f"<td>{candidate.turnover_ratio:.1f}x</td>"
             f"<td>{candidate.raw_pct * 100:.1f}%</td>"
             f"<td>{candidate.raw_to_max:.2f}</td>"
@@ -614,7 +627,7 @@ def render_html(result: RunResult) -> str:
       <tr>
         <th>#</th><th>Code</th><th>Name</th><th>Lane</th><th>Market</th><th>Date</th>
         <th>Score</th><th>Close</th><th>1D</th><th>5D</th><th>20D</th><th>Turnover</th>
-        <th>Ratio</th><th>Raw pct</th><th>Raw max</th><th>Close loc</th><th>Upper</th>
+        <th>Volume</th><th>Ratio</th><th>Raw pct</th><th>Raw max</th><th>Close loc</th><th>Upper</th>
       </tr>
     </thead>
     <tbody>
@@ -634,9 +647,7 @@ def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool 
     fields = [
         {"name": "判定日", "value": str(result.target_latest_date or "-"), "inline": True},
         {"name": "候補数", "value": str(result.posted_count), "inline": True},
-        {"name": "開始遅延", "value": f"{delay_seconds}s", "inline": True},
         {"name": "取得", "value": f"OK {result.yahoo_ok} / Error {result.yahoo_errors}", "inline": True},
-        {"name": "JPX一覧", "value": str(result.jpx_list_date or "-"), "inline": True},
         {"name": "型", "value": ", ".join(f"{k}:{v}" for k, v in result.lane_counts.items()) or "-", "inline": True},
     ]
     if result.notes:
@@ -663,6 +674,7 @@ def build_candidate_embeds(candidates: list[Candidate]) -> list[dict[str, Any]]:
                 "color": color,
                 "fields": [
                     {"name": "終値", "value": f"{candidate.close:.1f}", "inline": True},
+                    {"name": "出来高", "value": fmt_volume(candidate.volume), "inline": True},
                     {
                         "name": "騰落",
                         "value": f"1D {fmt_pct(candidate.day_ret)} / 5D {fmt_pct(candidate.ret5)} / 20D {fmt_pct(candidate.ret20)}",
@@ -670,24 +682,8 @@ def build_candidate_embeds(candidates: list[Candidate]) -> list[dict[str, Any]]:
                     },
                     {"name": "売買代金", "value": fmt_oku(candidate.turnover), "inline": True},
                     {"name": "通常比", "value": f"{candidate.turnover_ratio:.1f}x", "inline": True},
-                    {
-                        "name": "反応",
-                        "value": (
-                            f"raw {candidate.raw_pct * 100:.1f}% / max {candidate.raw_to_max:.2f}\n"
-                            f"quality {candidate.qual_pct * 100:.1f}% / max {candidate.qual_to_max:.2f}"
-                        ),
-                        "inline": False,
-                    },
-                    {
-                        "name": "形状",
-                        "value": (
-                            f"終値位置 {candidate.close_loc:.2f} / 上ヒゲ {candidate.upper_wick:.2f}\n"
-                            f"52週位置 {candidate.pos252:.2f} / 120日高値比 {fmt_pct(candidate.dd120)}"
-                        ),
-                        "inline": False,
-                    },
                 ],
-                "footer": {"text": "title click opens TradingView"},
+                "footer": {"text": "タイトルからTradingViewを開けます"},
             }
         )
     return embeds
@@ -714,10 +710,6 @@ def post_webhook(webhook_url: str, payload: dict[str, Any], files: list[tuple[st
 def post_to_discord(result: RunResult, webhook_url: str, output_paths: tuple[Path, Path, Path], delay_seconds: int, dry_run: bool) -> None:
     data_stale = bool(result.notes and result.target_latest_date and result.target_latest_date < now_jst().date().isoformat())
     summary_payload = {"embeds": [build_summary_embed(result, delay_seconds, data_stale=data_stale)]}
-    attachments = [
-        (output_paths[1].name, output_paths[1].read_bytes(), "text/csv"),
-        (output_paths[2].name, output_paths[2].read_bytes(), "text/html"),
-    ]
 
     if dry_run:
         print(json.dumps(summary_payload, ensure_ascii=False, indent=2))
@@ -725,7 +717,7 @@ def post_to_discord(result: RunResult, webhook_url: str, output_paths: tuple[Pat
             print(json.dumps(embed, ensure_ascii=False, indent=2))
         return
 
-    post_webhook(webhook_url, summary_payload, files=attachments)
+    post_webhook(webhook_url, summary_payload)
     embeds = build_candidate_embeds(result.candidates)
     for start in range(0, len(embeds), 10):
         post_webhook(webhook_url, {"embeds": embeds[start : start + 10]})
