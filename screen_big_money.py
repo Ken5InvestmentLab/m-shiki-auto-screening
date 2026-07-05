@@ -40,6 +40,7 @@ class ScreeningConfig:
     max_workers: int = 48
     as_of_date: str | None = None
     run_at_jst: datetime | None = None
+    lookback_days: int = 7
     min_turnover_yen: float = 20_000_000
     min_turnover_ratio: float = 5.0
     strong_reaction_pct: float = 0.985
@@ -110,6 +111,7 @@ class RunResult:
     generated_at_jst: str
     screening_started_at_jst: str
     target_latest_date: str | None
+    lookback_start_date: str | None
     jpx_list_date: str | None
     universe_count: int
     yahoo_ok: int
@@ -216,6 +218,12 @@ def fmt_lane_counts(lane_counts: dict[str, int]) -> str:
     if not lane_counts:
         return "-"
     return " / ".join(f"{lane_label(lane)} {count}" for lane, count in lane_counts.items())
+
+
+def lookback_start_date(target_latest_date: str | None, lookback_days: int) -> str | None:
+    if not target_latest_date:
+        return None
+    return (datetime.strptime(target_latest_date, "%Y-%m-%d").date() - timedelta(days=lookback_days)).isoformat()
 
 
 def fmt_jst_datetime(value: str | None) -> str:
@@ -383,31 +391,29 @@ def calc_reactions(
     return raw, quality, turnover_ratios, volume_ratios, close_locs, upper_wicks
 
 
-def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None, str | None, str | None]:
-    chart, error = fetch_chart(issue, config)
-    if error:
-        return None, None, error
-    parsed = chart_to_arrays(chart or {}, config.as_of_date)
-    if parsed is None:
-        return None, None, "too_few_rows"
-
-    dates, arrays = parsed
-    open_ = arrays["open"]
-    high = arrays["high"]
-    low = arrays["low"]
-    close = arrays["close"]
-    volume = arrays["volume"]
+def make_candidate(
+    issue: Issue,
+    dates: np.ndarray,
+    open_: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    close: np.ndarray,
+    volume: np.ndarray,
+    raw: np.ndarray,
+    quality: np.ndarray,
+    turnover_ratios: np.ndarray,
+    volume_ratios: np.ndarray,
+    i: int,
+    config: ScreeningConfig,
+) -> tuple[Candidate | None, str | None]:
     turnover = close * volume
-    i = len(close) - 1
-
-    raw, quality, turnover_ratios, volume_ratios, _, _ = calc_reactions(open_, high, low, close, volume)
     if not np.isfinite(raw[i]) or not np.isfinite(quality[i]):
-        return None, dates[-1], "no_reaction"
+        return None, "no_reaction"
 
     raw_valid = raw[120:i][np.isfinite(raw[120:i]) & (raw[120:i] > 0)]
     quality_valid = quality[120:i][np.isfinite(quality[120:i]) & (quality[120:i] > 0)]
     if raw_valid.size < 80 or quality_valid.size < 80:
-        return None, dates[-1], "too_few_reactions"
+        return None, "too_few_reactions"
 
     raw_pct = percentile_rank(raw_valid, raw[i])
     raw_to_max = raw[i] / float(np.nanmax(raw[120 : i + 1]))
@@ -457,7 +463,7 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
         and turnover_ratios[i] >= 5.0
     )
     if not strong_lane and not quiet_lane:
-        return None, dates[-1], "no_lane"
+        return None, "no_lane"
 
     lane = "strong" if strong_lane else "quiet"
     score = 0.0
@@ -481,7 +487,7 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
             name=issue.name,
             market=issue.market,
             lane=lane,
-            date=str(dates[-1]),
+            date=str(dates[i]),
             score=float(score),
             close=float(close[i]),
             day_ret=float(day_ret),
@@ -502,9 +508,56 @@ def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[Candidate | None
             dd120=float(dd120),
             range_pct=float(range_pct),
         ),
-        dates[-1],
         None,
     )
+
+
+def score_issue(issue: Issue, config: ScreeningConfig) -> tuple[list[Candidate], str | None, str | None]:
+    chart, error = fetch_chart(issue, config)
+    if error:
+        return [], None, error
+    parsed = chart_to_arrays(chart or {}, config.as_of_date)
+    if parsed is None:
+        return [], None, "too_few_rows"
+
+    dates, arrays = parsed
+    open_ = arrays["open"]
+    high = arrays["high"]
+    low = arrays["low"]
+    close = arrays["close"]
+    volume = arrays["volume"]
+
+    raw, quality, turnover_ratios, volume_ratios, _, _ = calc_reactions(open_, high, low, close, volume)
+    target_date = str(dates[-1])
+    window_start = (datetime.strptime(target_date, "%Y-%m-%d").date() - timedelta(days=config.lookback_days)).isoformat()
+    candidates: list[Candidate] = []
+    latest_error: str | None = "no_lane"
+    for i, date_value in enumerate(dates):
+        if i < 120 or str(date_value) < window_start:
+            continue
+        candidate, candidate_error = make_candidate(
+            issue,
+            dates,
+            open_,
+            high,
+            low,
+            close,
+            volume,
+            raw,
+            quality,
+            turnover_ratios,
+            volume_ratios,
+            i,
+            config,
+        )
+        if candidate:
+            candidates.append(candidate)
+        elif candidate_error:
+            latest_error = candidate_error
+    if not candidates:
+        return [], target_date, latest_error
+    candidates.sort(key=lambda candidate: (candidate.date, candidate.score), reverse=True)
+    return candidates[:1], target_date, None
 
 
 def run_screening(config: ScreeningConfig) -> RunResult:
@@ -520,12 +573,12 @@ def run_screening(config: ScreeningConfig) -> RunResult:
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         futures = {executor.submit(score_issue, issue, config): issue for issue in issues}
         for index, future in enumerate(as_completed(futures), 1):
-            candidate, latest_date, error = future.result()
+            issue_candidates, latest_date, error = future.result()
             if latest_date:
                 latest_dates[latest_date] = latest_dates.get(latest_date, 0) + 1
                 yahoo_ok += 1
-            if candidate:
-                candidates.append(candidate)
+            if issue_candidates:
+                candidates.extend(issue_candidates)
             elif error:
                 if latest_date:
                     filtered_count += 1
@@ -535,8 +588,13 @@ def run_screening(config: ScreeningConfig) -> RunResult:
                 print(f"progress {index}/{len(issues)}", flush=True)
 
     target_latest_date = max(latest_dates.items(), key=lambda item: item[1])[0] if latest_dates else None
-    eligible = [candidate for candidate in candidates if candidate.date == target_latest_date]
-    eligible.sort(key=lambda candidate: candidate.score, reverse=True)
+    start_date = lookback_start_date(target_latest_date, config.lookback_days)
+    eligible = [
+        candidate
+        for candidate in candidates
+        if target_latest_date and start_date and start_date <= candidate.date <= target_latest_date
+    ]
+    eligible.sort(key=lambda candidate: (candidate.date, candidate.score), reverse=True)
     top = eligible[: config.max_results]
 
     lane_counts: dict[str, int] = {}
@@ -553,6 +611,7 @@ def run_screening(config: ScreeningConfig) -> RunResult:
         generated_at_jst=run_now.isoformat(timespec="seconds"),
         screening_started_at_jst=started_at,
         target_latest_date=target_latest_date,
+        lookback_start_date=start_date,
         jpx_list_date=list_date,
         universe_count=len(issues),
         yahoo_ok=yahoo_ok,
@@ -714,6 +773,7 @@ def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool 
     fields = [
         {"name": "判定日時", "value": fmt_jst_datetime(result.generated_at_jst), "inline": True},
         {"name": "通知", "value": f"{result.posted_count}銘柄", "inline": True},
+        {"name": "対象期間", "value": f"{result.lookback_start_date or '-'} - {result.target_latest_date or '-'}", "inline": False},
         {"name": "内訳", "value": fmt_lane_counts(result.lane_counts), "inline": False},
     ]
     if result.notes:
@@ -736,7 +796,7 @@ def build_candidate_embeds(candidates: list[Candidate]) -> list[dict[str, Any]]:
             {
                 "title": f"#{rank} {candidate.code} {candidate.name}",
                 "url": candidate.tradingview_url,
-                "description": f"{lane_label(candidate.lane)} / {candidate.market} / スコア {candidate.score:.1f}",
+                "description": f"反応日 {candidate.date} / {lane_label(candidate.lane)} / {candidate.market} / スコア {candidate.score:.1f}",
                 "color": color,
                 "fields": [
                     {
@@ -825,6 +885,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-results", type=int, default=20)
     parser.add_argument("--max-workers", type=int, default=48)
     parser.add_argument("--min-turnover-yen", type=float, default=20_000_000)
+    parser.add_argument("--lookback-days", type=int, default=7, help="Notify symbols with reactions within this many calendar days.")
     parser.add_argument("--output-dir", default="reports")
     parser.add_argument("--as-of-date", type=parse_iso_date, help="Backtest using OHLCV bars on or before YYYY-MM-DD.")
     parser.add_argument("--run-at-jst", type=parse_jst_datetime, help="Override run timestamp, e.g. 2026-07-02T15:52:00.")
@@ -843,6 +904,7 @@ def main() -> int:
         max_workers=args.max_workers,
         as_of_date=as_of_date,
         run_at_jst=args.run_at_jst,
+        lookback_days=args.lookback_days,
         min_turnover_yen=args.min_turnover_yen,
     )
     result = retry_until_fresh(args, config)

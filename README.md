@@ -1,12 +1,12 @@
 # M式自動スクリーニング
 
-東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、Discord WebhookへEmbed通知します。
+東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、判定日から直近7日以内に反応が出た銘柄をDiscord WebhookへEmbed通知します。
 
 ## 運用
 
 - GitHub Actionsは平日15:50 JSTに起動し、ジョブ内で15:52:00 JSTまで待機してからスクリーニングします。
 - Discord Webhookはコードに保存せず、GitHub Secretsの`DISCORD_WEBHOOK_URL`に設定します。
-- 通知は最大20件です。条件を満たす銘柄が少ない日は0件から数件だけ通知します。
+- 通知は最大20件です。条件を満たす銘柄がない日も0件として要約通知します。
 - EmbedタイトルからTradingViewへ直接移動できます。
 
 ## 検出ロジック
