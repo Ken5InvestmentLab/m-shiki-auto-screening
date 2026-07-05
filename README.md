@@ -41,5 +41,5 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 ## GitHub Actions設定
 
 1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
-2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。
+2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で15:52待機をスキップします。
 3. 平日は15:50 JSTにWorkflowが起動し、15:52 JSTまで待機してからスクリーニングします。

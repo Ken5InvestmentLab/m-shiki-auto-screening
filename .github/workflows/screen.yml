@@ -3,6 +3,10 @@ name: M式自動スクリーニング
 on:
   workflow_dispatch:
     inputs:
+      no_wait:
+        description: "Skip waiting until 15:52 JST for manual runs"
+        required: false
+        default: "true"
       dry_run:
         description: "Do not post to Discord"
         required: false
@@ -46,6 +50,9 @@ jobs:
           EXTRA_ARGS=""
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --dry-run"
+          fi
+          if [ "${{ github.event.inputs.no_wait }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --no-wait"
           fi
           if [ "${{ github.event.inputs.allow_stale_data }}" = "true" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --allow-stale-data"
