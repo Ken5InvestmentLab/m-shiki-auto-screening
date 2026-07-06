@@ -4,7 +4,8 @@
 
 ## 運用
 
-- GitHub Actionsは平日15:50 JSTに起動し、ジョブ内で15:52:00 JSTまで待機してからスクリーニングします。
+- GASの時間主導トリガーから平日16:00 JSTにGitHub Actionsを起動します。
+- GitHub Actions側のcron scheduleは使わず、手動実行またはGASからの`workflow_dispatch`で起動します。
 - Discord Webhookはコードに保存せず、GitHub Secretsの`DISCORD_WEBHOOK_URL`に設定します。
 - 通知は最大20件です。条件を満たす銘柄がない日も0件として要約通知します。
 - EmbedタイトルからTradingViewへ直接移動できます。
@@ -41,5 +42,15 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 ## GitHub Actions設定
 
 1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
-2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で15:52待機をスキップします。
-3. 平日は15:50 JSTにWorkflowが起動し、15:52 JSTまで待機してからスクリーニングします。
+2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で待機をスキップします。
+
+## GAS起動設定
+
+専用GASプロジェクト: https://script.google.com/d/12cN3Fd_mVrtC-0UIa9QlLP-jHtOu8gLgUZMsLxcVAFg5la9Pl99w8Tqt/edit
+
+1. GitHub Fine-grained personal access tokenを作成し、このリポジトリに対してActions read/write権限を付与します。
+2. GASプロジェクトのScript Propertiesに`GITHUB_TOKEN`としてトークンを保存します。
+3. GASコードは[gas/Code.js](gas/Code.js)と[gas/appsscript.json](gas/appsscript.json)を`clasp push`で反映します。
+4. GASエディタで`setupDailyTrigger`を1回実行し、16:00 JSTの日次トリガーを作成します。
+5. GASの時間主導トリガーは秒単位の厳密実行ではありません。16:00前に起動した場合は、スクリプト内で16:00以降のリトライを予約します。
+6. トリガー自体は毎日動きますが、スクリプト内で土日はスキップします。

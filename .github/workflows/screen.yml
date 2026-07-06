@@ -23,9 +23,6 @@ on:
         description: "Override run timestamp, e.g. 2026-07-02T15:52:00"
         required: false
         default: ""
-  schedule:
-    # 15:50 JST on weekdays. The job waits until 15:52:00 JST before screening.
-    - cron: "50 6 * * 1-5"
 
 concurrency:
   group: big-money-screening
