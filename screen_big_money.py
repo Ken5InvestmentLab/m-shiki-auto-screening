@@ -223,7 +223,7 @@ def fmt_volume(value: float) -> str:
 
 
 def lane_label(lane: str) -> str:
-    return {"strong": "strong 強反応", "quiet": "quiet 静かな反応", "watch": "watch 兆候反応"}.get(lane, lane)
+    return {"strong": "strong 強反応", "quiet": "quiet 静かな反応", "watch": "watch 前兆"}.get(lane, lane)
 
 
 def fmt_lane_counts(lane_counts: dict[str, int]) -> str:
@@ -800,7 +800,7 @@ def render_html(result: RunResult) -> str:
 
 
 def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool = False) -> dict[str, Any]:
-    title = "大口仕込みスクリーニング"
+    title = "M式自動スクリーニング"
     description = "条件通過なし" if not result.candidates else f"{result.posted_count}銘柄を検出"
     if data_stale:
         description = "Yahoo日足データが本日分に更新されていない可能性があります"
