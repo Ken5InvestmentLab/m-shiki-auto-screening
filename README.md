@@ -1,6 +1,6 @@
 # M式自動スクリーニング
 
-東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、判定日から直近7日以内に反応が出た銘柄をDiscord WebhookへEmbed通知します。
+東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、判定日当日に反応が出た銘柄をDiscord WebhookへEmbed通知します。
 
 ## 運用
 

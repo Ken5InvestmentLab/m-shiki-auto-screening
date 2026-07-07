@@ -40,7 +40,7 @@ class ScreeningConfig:
     max_workers: int = 48
     as_of_date: str | None = None
     run_at_jst: datetime | None = None
-    lookback_days: int = 7
+    lookback_days: int = 0
     min_turnover_yen: float = 20_000_000
     min_turnover_ratio: float = 5.0
     strong_reaction_pct: float = 0.985
@@ -919,7 +919,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-results", type=int, default=20)
     parser.add_argument("--max-workers", type=int, default=48)
     parser.add_argument("--min-turnover-yen", type=float, default=20_000_000)
-    parser.add_argument("--lookback-days", type=int, default=7, help="Notify symbols with reactions within this many calendar days.")
+    parser.add_argument("--lookback-days", type=int, default=0, help="Notify symbols with reactions this many calendar days before the latest market date.")
     parser.add_argument("--output-dir", default="reports")
     parser.add_argument("--as-of-date", type=parse_iso_date, help="Backtest using OHLCV bars on or before YYYY-MM-DD.")
     parser.add_argument("--run-at-jst", type=parse_jst_datetime, help="Override run timestamp, e.g. 2026-07-02T15:52:00.")
