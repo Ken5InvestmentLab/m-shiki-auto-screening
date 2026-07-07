@@ -48,6 +48,10 @@ class ScreeningConfig:
     strong_reaction_to_max: float = 0.70
     quiet_reaction_pct: float = 0.960
     quiet_reaction_to_max: float = 0.55
+    watch_reaction_pct: float = 0.940
+    watch_raw_to_max: float = 0.45
+    watch_quality_pct: float = 0.900
+    watch_reaction_to_max: float = 0.28
     min_day_ret: float = -0.02
     max_day_ret: float = 0.04
     min_5d_ret: float = -0.10
@@ -66,6 +70,11 @@ class ScreeningConfig:
     max_quiet_abs_5d_ret: float = 0.055
     max_quiet_abs_20d_ret: float = 0.08
     max_quiet_pos20: float = 0.25
+    min_watch_close_loc: float = 0.35
+    max_watch_upper_wick: float = 0.35
+    max_watch_abs_5d_ret: float = 0.065
+    max_watch_abs_20d_ret: float = 0.10
+    max_watch_pos20: float = 0.35
     yahoo_range: str = "2y"
     yahoo_interval: str = "1d"
 
@@ -214,7 +223,7 @@ def fmt_volume(value: float) -> str:
 
 
 def lane_label(lane: str) -> str:
-    return {"strong": "strong 強反応", "quiet": "quiet 静かな反応"}.get(lane, lane)
+    return {"strong": "strong 強反応", "quiet": "quiet 静かな反応", "watch": "watch 兆候反応"}.get(lane, lane)
 
 
 def fmt_lane_counts(lane_counts: dict[str, int]) -> str:
@@ -471,17 +480,33 @@ def make_candidate(
         and pos20 <= config.max_quiet_pos20
         and turnover_ratios[i] >= 5.0
     )
-    if not strong_lane and not quiet_lane:
+    watch_lane = (
+        common
+        and raw_pct >= config.watch_reaction_pct
+        and raw_to_max >= config.watch_raw_to_max
+        and quality_pct >= config.watch_quality_pct
+        and quality_to_max >= config.watch_reaction_to_max
+        and close_loc >= config.min_watch_close_loc
+        and upper_wick <= config.max_watch_upper_wick
+        and abs(ret5) <= config.max_watch_abs_5d_ret
+        and abs(ret20) <= config.max_watch_abs_20d_ret
+        and pos20 <= config.max_watch_pos20
+        and turnover_ratios[i] >= 5.0
+    )
+    if not strong_lane and not quiet_lane and not watch_lane:
         return None, "no_lane"
 
-    lane = "strong" if strong_lane else "quiet"
+    lane = "strong" if strong_lane else "quiet" if quiet_lane else "watch"
     score = 0.0
     if lane == "strong":
         score += min(30.0, (quality_pct - config.strong_reaction_pct) / (1.0 - config.strong_reaction_pct) * 30.0)
         score += 20.0 * min(1.0, quality_to_max)
-    else:
+    elif lane == "quiet":
         score += min(24.0, (raw_pct - config.quiet_reaction_pct) / (1.0 - config.quiet_reaction_pct) * 24.0)
         score += 15.0 * min(1.0, raw_to_max)
+    else:
+        score += min(16.0, (raw_pct - config.watch_reaction_pct) / (1.0 - config.watch_reaction_pct) * 16.0)
+        score += 10.0 * min(1.0, raw_to_max)
     score += min(16.0, math.log1p(turnover_ratios[i]) * 4.8)
     score += min(8.0, math.log1p(volume_ratios[i]) * 2.2)
     score += 8.0 if pos252 <= 0.25 else 6.0 if pos252 <= 0.45 else 3.0 if pos252 <= 0.60 else 0.0
@@ -800,7 +825,7 @@ def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool 
 def build_candidate_embeds(candidates: list[Candidate]) -> list[dict[str, Any]]:
     embeds: list[dict[str, Any]] = []
     for rank, candidate in enumerate(candidates, 1):
-        color = 0x22C55E if candidate.lane == "strong" else 0xEAB308
+        color = {"strong": 0x22C55E, "quiet": 0xEAB308, "watch": 0x38BDF8}.get(candidate.lane, 0x94A3B8)
         embeds.append(
             {
                 "title": f"#{rank} {candidate.code} {candidate.name}",
