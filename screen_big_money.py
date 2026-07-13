@@ -62,7 +62,7 @@ class ScreeningConfig:
     max_price_pos_252: float = 0.55
     max_dd120: float = -0.05
     max_pre20_range: float = 0.07
-    max_signal_range: float = 0.03
+    max_signal_range: float = 0.04
     min_strong_close_loc: float = 0.55
     max_strong_upper_wick: float = 0.35
     min_quiet_close_loc: float = 0.40
