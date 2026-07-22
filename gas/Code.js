@@ -7,6 +7,9 @@ const DAILY_TRIGGER_FUNCTION_NAME = 'runDailyMShikiScreening';
 const RETRY_TRIGGER_FUNCTION_NAME = 'retryMShikiScreening';
 const DISPATCH_HOUR_JST = 16;
 const DISPATCH_MINUTE_JST = 0;
+const NATIONAL_HOLIDAY_CSV_URL = 'https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv';
+const NATIONAL_HOLIDAY_CACHE_KEY = 'national-holidays-csv-v1';
+const NATIONAL_HOLIDAY_CACHE_SECONDS = 21600;
 
 function runDailyMShikiScreening() {
   dispatchMShikiScreeningIfReady_();
@@ -23,9 +26,9 @@ function triggerMShikiScreening() {
 
 function dispatchMShikiScreeningIfReady_() {
   const now = new Date();
-  const dayOfWeek = Number(Utilities.formatDate(now, TIME_ZONE, 'u'));
-  if (dayOfWeek >= 6) {
-    console.log('Skip weekend run.');
+  const closureReason = bankClosureReason_(now);
+  if (closureReason) {
+    console.log(`Skip closed-day run: ${closureReason}.`);
     return;
   }
 
@@ -68,6 +71,50 @@ function dispatchMShikiScreeningIfReady_() {
   }
 
   console.log('M-shiki screening workflow dispatched.');
+}
+
+function bankClosureReason_(date) {
+  const dayOfWeek = Number(Utilities.formatDate(date, TIME_ZONE, 'u'));
+  const monthDay = Utilities.formatDate(date, TIME_ZONE, 'MM-dd');
+  const dateKey = Utilities.formatDate(date, TIME_ZONE, 'yyyy/M/d');
+
+  if (dayOfWeek >= 6) {
+    return 'weekend';
+  }
+  if (['12-31', '01-01', '01-02', '01-03'].includes(monthDay)) {
+    return 'bank year-end/new-year holiday';
+  }
+  if (nationalHolidayDateKeys_(dateKey.split('/')[0]).has(dateKey)) {
+    return 'Japanese national holiday';
+  }
+  return '';
+}
+
+function nationalHolidayDateKeys_(requiredYear) {
+  const cache = CacheService.getScriptCache();
+  let csvText = cache.get(NATIONAL_HOLIDAY_CACHE_KEY);
+
+  if (!csvText) {
+    const response = UrlFetchApp.fetch(NATIONAL_HOLIDAY_CSV_URL, {
+      followRedirects: true,
+      muteHttpExceptions: true,
+    });
+    if (response.getResponseCode() !== 200) {
+      throw new Error(`National holiday CSV fetch failed: ${response.getResponseCode()}`);
+    }
+    csvText = response.getContentText('Shift_JIS');
+    cache.put(NATIONAL_HOLIDAY_CACHE_KEY, csvText, NATIONAL_HOLIDAY_CACHE_SECONDS);
+  }
+
+  const rows = Utilities.parseCsv(csvText);
+  const dateKeys = rows
+    .slice(1)
+    .map(row => String(row[0] || '').trim())
+    .filter(Boolean);
+  if (!dateKeys.some(dateKey => dateKey.startsWith(`${requiredYear}/`))) {
+    throw new Error(`National holiday CSV has no entries for ${requiredYear}; workflow dispatch stopped.`);
+  }
+  return new Set(dateKeys);
 }
 
 function setupDailyTrigger() {

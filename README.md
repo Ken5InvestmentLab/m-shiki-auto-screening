@@ -55,4 +55,5 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 3. GASコードは[gas/Code.js](gas/Code.js)と[gas/appsscript.json](gas/appsscript.json)を`clasp push`で反映します。
 4. GASエディタで`setupDailyTrigger`を1回実行し、16:00 JSTの日次トリガーを作成します。
 5. GASの時間主導トリガーは秒単位の厳密実行ではありません。16:00前に起動した場合は、スクリプト内で16:00以降のリトライを予約します。
-6. トリガー自体は毎日動きますが、スクリプト内で土日はスキップします。
+6. トリガー自体は毎日確認を行いますが、GitHub Actionsの起動は土曜・日曜・国民の祝日・12月31日〜1月3日にスキップします。
+7. 国民の祝日（振替休日・国民の休日を含む）は内閣府の公式CSVを参照し、取得失敗や対象年データの欠落時はワークフローを起動しません。

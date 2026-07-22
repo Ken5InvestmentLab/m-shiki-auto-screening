@@ -13,4 +13,5 @@
 ## GAS automation
 
 - The dedicated Apps Script project is linked by `.clasp.json` with `gas/` as the root directory. After editing `gas/Code.js` or `gas/appsscript.json`, sync it with `npx @google/clasp push -f`.
+- Keep scheduled workflow dispatches fail-closed on Japanese bank closure days: weekends, Cabinet Office national holidays, and December 31 through January 3. Do not replace the official holiday CSV with a general observance calendar.
 - Do not commit GitHub tokens or GAS Script Properties. The GAS runtime should read the workflow dispatch token from the `GITHUB_TOKEN` Script Property.
