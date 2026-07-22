@@ -22,7 +22,7 @@
 
 - 売買代金2,000万円未満
 - 当日騰落率が-2%未満または+4%超、5日±10%超、20日±18%超
-- 事前20日高安値幅7%超、当日高安値幅4%超
+- 事前20日高安値幅8.5%超、当日高安値幅4%超
 - 52週高値圏
 - 120日高値から5%未満の押し
 - 直近上昇後/崩落後/長い上ヒゲ失速
@@ -45,6 +45,7 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 
 1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
 2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で待機をスキップします。
+3. 過去期間をまとめて確認する手動実行だけ`lookback_days`を指定できます。通常の自動実行は既定値`0`のまま当日限定です。
 
 ## GAS起動設定
 

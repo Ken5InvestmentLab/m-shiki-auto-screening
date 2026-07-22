@@ -23,6 +23,10 @@ on:
         description: "Override run timestamp, e.g. 2026-07-02T15:52:00"
         required: false
         default: ""
+      lookback_days:
+        description: "Include reactions this many calendar days before the latest market date"
+        required: false
+        default: "0"
 
 concurrency:
   group: big-money-screening
@@ -67,6 +71,9 @@ jobs:
           fi
           if [ -n "${{ github.event.inputs.run_at_jst }}" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --run-at-jst ${{ github.event.inputs.run_at_jst }}"
+          fi
+          if [ -n "${{ github.event.inputs.lookback_days }}" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --lookback-days ${{ github.event.inputs.lookback_days }}"
           fi
           python screen_big_money.py \
             --wait-until 15:52 \
