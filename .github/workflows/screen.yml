@@ -98,7 +98,7 @@ jobs:
           if [ -n "${{ github.event.inputs.history_end_date }}" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --end-date ${{ github.event.inputs.history_end_date }}"
           fi
-          python backfill_history.py \
+          python backfill_entry.py \
             --start-date "${{ github.event.inputs.history_start_date }}" \
             --max-results-per-day 20 \
             $EXTRA_ARGS
