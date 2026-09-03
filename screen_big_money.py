@@ -5,6 +5,7 @@ import csv
 import json
 import math
 import os
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,7 +15,7 @@ from html import escape
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 
 import numpy as np
 import pandas as pd
@@ -22,9 +23,8 @@ import requests
 from zoneinfo import ZoneInfo
 
 
-JPX_LISTED_ISSUES_URL = (
-    "https://www.jpx.co.jp/markets/statistics-equities/misc/"
-    "tvdivq0000001vg2-att/data_j.xls"
+JPX_LIST_PAGE_URL = (
+    "https://www.jpx.co.jp/markets/statistics-equities/misc/01.html"
 )
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.T"
 USER_AGENT = (
@@ -262,22 +262,72 @@ def embed_timestamp(value: str | None) -> str:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
-def fetch_jpx_issues(url: str = JPX_LISTED_ISSUES_URL) -> tuple[str | None, list[Issue]]:
-    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=45)
+def resolve_jpx_list_url() -> str:
+    response = requests.get(
+        JPX_LIST_PAGE_URL,
+        headers={"User-Agent": USER_AGENT},
+        timeout=45,
+    )
     response.raise_for_status()
+
+    matches = re.findall(
+        r'href=["\']([^"\']+\.xls(?:\?[^"\']*)?)["\']',
+        response.text,
+        flags=re.IGNORECASE,
+    )
+
+    if not matches:
+        raise RuntimeError("JPX listed issues Excel link not found")
+
+    return urljoin(JPX_LIST_PAGE_URL, matches[0])
+
+
+def fetch_jpx_issues() -> tuple[str | None, list[Issue]]:
+    url = resolve_jpx_list_url()
+
+    print(f"JPX listed issues URL: {url}", flush=True)
+
+    response = requests.get(
+        url,
+        headers={"User-Agent": USER_AGENT},
+        timeout=45,
+    )
+    response.raise_for_status()
+
     df = pd.read_excel(BytesIO(response.content))
-    date_col, code_col, name_col, market_col = df.columns[0], df.columns[1], df.columns[2], df.columns[3]
-    domestic = df[df[market_col].astype(str).str.contains("\u5185\u56fd\u682a\u5f0f", na=False, regex=False)]
+
+    date_col, code_col, name_col, market_col = (
+        df.columns[0],
+        df.columns[1],
+        df.columns[2],
+        df.columns[3],
+    )
+
+    domestic = df[
+        df[market_col]
+        .astype(str)
+        .str.contains("国内株式", na=False, regex=False)
+    ]
+
     issues: list[Issue] = []
+
     for _, row in domestic.iterrows():
         issues.append(
             Issue(
                 code=str(row[code_col]).strip(),
                 name=str(row[name_col]).strip(),
-                market=str(row[market_col]).replace("（内国株式）", "").strip(),
+                market=str(row[market_col])
+                .replace("（内国株式）", "")
+                .strip(),
             )
         )
-    list_date = str(domestic[date_col].iloc[0]) if not domestic.empty else None
+
+    list_date = (
+        str(domestic[date_col].iloc[0])
+        if not domestic.empty
+        else None
+    )
+
     return list_date, issues
 
 
