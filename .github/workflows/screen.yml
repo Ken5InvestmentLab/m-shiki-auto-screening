@@ -84,7 +84,7 @@ jobs:
           if [ -n "${{ github.event.inputs.lookback_days }}" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --lookback-days ${{ github.event.inputs.lookback_days }}"
           fi
-          python screen_big_money.py \
+          python screen_entry.py \
             --wait-until 15:52 \
             --max-results 20 \
             --retry-until-updated-minutes 20 \
