@@ -270,16 +270,51 @@ def resolve_jpx_list_url() -> str:
     )
     response.raise_for_status()
 
-    matches = re.findall(
-        r'href=["\']([^"\']+\.xls(?:\?[^"\']*)?)["\']',
-        response.text,
-        flags=re.IGNORECASE,
+    html = (
+        response.text
+        .replace("\\/", "/")
+        .replace("&amp;", "&")
     )
 
-    if not matches:
-        raise RuntimeError("JPX listed issues Excel link not found")
+    patterns = [
+        # data_j を優先して探す
+        r'["\']([^"\']*data_j[^"\']*\.(?:xls|xlsx)(?:\?[^"\']*)?)["\']',
 
-    return urljoin(JPX_LIST_PAGE_URL, matches[0])
+        # href以外の data-url 等も含め、Excelファイル全般を探す
+        r'["\']([^"\']+\.(?:xls|xlsx)(?:\?[^"\']*)?)["\']',
+    ]
+
+    candidates = []
+
+    for pattern in patterns:
+        matches = re.findall(
+            pattern,
+            html,
+            flags=re.IGNORECASE,
+        )
+
+        for match in matches:
+            url = urljoin(JPX_LIST_PAGE_URL, match)
+
+            if url not in candidates:
+                candidates.append(url)
+
+    print(
+        f"JPX Excel candidates: {candidates[:10]}",
+        flush=True,
+    )
+
+    if not candidates:
+        raise RuntimeError(
+            "JPX listed issues Excel link not found"
+        )
+
+    # data_j を含むものを最優先
+    for url in candidates:
+        if "data_j" in url.lower():
+            return url
+
+    return candidates[0]
 
 
 def fetch_jpx_issues() -> tuple[str | None, list[Issue]]:
