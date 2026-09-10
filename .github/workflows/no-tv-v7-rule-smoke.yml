@@ -1,0 +1,47 @@
+name: No-TV V7 Rule Smoke
+
+on:
+  push:
+    branches: [experiment/no-tv-research-v3]
+    paths:
+      - no_tv_v7_rules.py
+      - .github/workflows/no-tv-v7-rule-smoke.yml
+  workflow_dispatch:
+
+concurrency:
+  group: no-tv-v7-rule-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-research-v3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_v7_rules.py
+      - name: Run V7 rule smoke
+        run: |
+          python no_tv_v7_rules.py \
+            --max-issues 400 \
+            --max-workers 32 \
+            --history-days 1825 \
+            --holdout-days 365 \
+            --output-dir reports_no_tv_v7
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-v7-rule-smoke
+          path: reports_no_tv_v7/
+          if-no-files-found: ignore
+          retention-days: 14
