@@ -204,8 +204,9 @@ def build_frame(issue,chart,history_start,end_date):
         df[f"perf_{n}bd"]=df[f"future_close_{n}"]/c-1
 
     use=(df.date>=history_start)&(df.date<=end_date)&df.base&df.candidate
+    local_features=[x for x in FEATURES if not x.startswith("xrank_")]
     cols=["ts","date","day_index","bar_index","close","volume","perf_5bd","perf_10bd","perf_20bd","perf_40bd",
-          "exit_date_5","exit_date_10","exit_date_20","exit_date_40"]+FEATURES+[
+          "exit_date_5","exit_date_10","exit_date_20","exit_date_40"]+local_features+[
           "s_ema25","s_macdpos","s_stoch75","s_bb80","s_pre_down3","s_gapup"
     ]
     out=df.loc[use,cols].copy()
