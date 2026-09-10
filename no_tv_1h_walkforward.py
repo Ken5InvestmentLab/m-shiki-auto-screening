@@ -51,11 +51,11 @@ def fold_eval(pack,blend,q,k):
 
 
 def rank_fold_stats(ss):
-    if not ss: return -1e18
-    if min(s["n"] for s in ss)<5: return -1e18
+    if not ss: return None
+    if min(s["n"] for s in ss)<5: return None
     av=[s["robust_avg"] for s in ss]; wr=[s["wr"] for s in ss]; hit=[s["target_rate"] for s in ss]
     if min(av)<=0 or min(wr)<.45:
-        return -1e17+min(av)
+        return None
     return (
         3.2*min(av)+.45*min(wr)+.35*min(hit)
         +1.2*float(np.median(av))+.2*float(np.median(wr))+.1*float(np.median(hit))
@@ -72,10 +72,21 @@ def choose(packs):
                 for p in packs:
                     s,t=fold_eval(p,blend,q,k); ss.append(s); th.append(t)
                 r=rank_fold_stats(ss)
+                if r is None:
+                    continue
                 if best is None or r>best["rank"]:
                     best={"blend_name":name,"blend":blend,"q":q,"top_per_day":k,
-                          "fold_stats":ss,"fold_thresholds":th,"rank":r}
-    return best
+                          "fold_stats":ss,"fold_thresholds":th,"rank":r,
+                          "robust_policy_found":True}
+    if best is not None:
+        return best
+    name="balanced"; blend=h1.BLENDS[name]; q=.99; k=1
+    ss=[]; th=[]
+    for p in packs:
+        s,t=fold_eval(p,blend,q,k); ss.append(s); th.append(t)
+    return {"blend_name":name,"blend":blend,"q":q,"top_per_day":k,
+            "fold_stats":ss,"fold_thresholds":th,"rank":None,
+            "robust_policy_found":False}
 
 
 def report(r):
@@ -146,7 +157,8 @@ def run(args):
         "history_start":history_start,"holdout_start":holdout_start,"end_date":args.end_date,
         "jpx_list_date":list_date,"universe_count":len(issues),"yahoo_ok":ok,"errors":errors,
         "candidate_rows":len(df),"folds":fs,"current_reference":h1.CURRENT_REFERENCE,
-        "policy":{"blend_name":pol["blend_name"],"blend":pol["blend"],"q":pol["q"],
+        "policy":{"robust_policy_found":pol.get("robust_policy_found",False),
+                  "blend_name":pol["blend_name"],"blend":pol["blend"],"q":pol["q"],
                   "top_per_day":pol["top_per_day"],"fold_stats":pol["fold_stats"],
                   "fold_thresholds":pol["fold_thresholds"],"final_threshold":thr},
         "holdout":{"h1_pine_current_prevday":h1.stats(exact),"h1_walkforward":h1.stats(ev)},
