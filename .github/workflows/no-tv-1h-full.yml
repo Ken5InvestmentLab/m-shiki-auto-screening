@@ -5,6 +5,7 @@ on:
     branches:
       - experiment/no-tv-research-v3
     paths:
+      - no_tv_1h_lab.py
       - .github/workflows/no-tv-1h-full.yml
   workflow_dispatch:
 
