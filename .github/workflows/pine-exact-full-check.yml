@@ -1,0 +1,55 @@
+name: Pine Exact Full Market Check
+
+on:
+  push:
+    branches:
+      - experiment/independent-daily-screener-v2
+    paths:
+      - independent_daily_pine_exact.py
+      - .github/workflows/pine-exact-full-check.yml
+
+concurrency:
+  group: pine-exact-full-check
+  cancel-in-progress: true
+
+jobs:
+  exact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout V2 branch
+        uses: actions/checkout@v7
+        with:
+          ref: experiment/independent-daily-screener-v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile
+        run: python -m py_compile independent_daily_pine_exact.py independent_daily_lab_v2.py
+
+      - name: Run Pine Exact full market
+        run: |
+          python independent_daily_pine_exact.py \
+            --max-workers 48 \
+            --history-days 1825 \
+            --holdout-days 365 \
+            --output-dir reports_pine_exact_full
+
+      - name: Upload exact report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pine-exact-full-market
+          path: reports_pine_exact_full/
+          if-no-files-found: ignore
+          retention-days: 30
