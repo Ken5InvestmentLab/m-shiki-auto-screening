@@ -565,25 +565,51 @@ def profile_mask(profile_id):
     return np.uint16(1 << PROFILE_BIT[profile_id])
 
 
-def select_period(df, profile_id, conditions, start_date, end_date, eval_days):
+def trigger_period(df, profile_id, start_date, end_date, eval_days):
+    """Trigger/date/confirmedだけを絞る。Score条件は後段で適用する。"""
     if df.empty:
         return df
     tb = df.trigger_bits.to_numpy(np.uint16)
     mask = (tb & profile_mask(profile_id)) != 0
-
-    if conditions:
-        cm = condition_mask(conditions)
-        sb = df.score_bits.to_numpy(np.uint64)
-        mask &= (sb & cm) == cm
-
-    mask &= (df.date.to_numpy(str) >= start_date)
-    mask &= (df.date.to_numpy(str) <= end_date)
+    dates = df.date.to_numpy(str)
+    mask &= (dates >= start_date) & (dates <= end_date)
 
     exit_col = f"exit_date_{eval_days}bd"
     exits = df[exit_col].fillna("").to_numpy(str)
-    # 期間内に評価日まで到達している「確定済み」だけ。
     mask &= (exits != "") & (exits <= end_date)
-    return df.loc[mask]
+    return df.loc[mask].copy()
+
+
+def select_conditions(frame, conditions):
+    if frame.empty or not conditions:
+        return frame
+    cm = condition_mask(conditions)
+    sb = frame.score_bits.to_numpy(np.uint64)
+    return frame.loc[(sb & cm) == cm]
+
+
+def build_trigger_cache(df, split, holdout_start, end_date):
+    """
+    最適化中に全base rowを何千回も走査しないよう、
+    profile × 評価日数 × period のTrigger候補を一度だけキャッシュする。
+    """
+    cache = {}
+    for p in PINE_PROFILES:
+        pid = p["id"]
+        cache[pid] = {}
+        for days in (5, 40):
+            cache[pid][days] = {
+                "train": trigger_period(
+                    df, pid, split["train_start"], split["train_end"], days
+                ),
+                "valid": trigger_period(
+                    df, pid, split["valid_start"], split["valid_end"], days
+                ),
+                "holdout": trigger_period(
+                    df, pid, holdout_start, end_date, days
+                ),
+            }
+    return cache
 
 
 def stats(events, days, target):
@@ -687,43 +713,63 @@ def quality_rank(train, valid, cfg):
     )
 
 
-def eval_train_valid(df, profile_id, conditions, cfg, split):
-    tr = select_period(
-        df, profile_id, conditions,
-        split["train_start"], split["train_end"], cfg["eval_days"]
+def eval_train_valid(cache, profile_id, conditions, cfg):
+    frames = cache[profile_id][cfg["eval_days"]]
+    tr = select_conditions(frames["train"], conditions)
+    va = select_conditions(frames["valid"], conditions)
+    return (
+        stats(tr, cfg["eval_days"], cfg["target"]),
+        stats(va, cfg["eval_days"], cfg["target"]),
     )
-    va = select_period(
-        df, profile_id, conditions,
-        split["valid_start"], split["valid_end"], cfg["eval_days"]
-    )
-    return stats(tr, cfg["eval_days"], cfg["target"]), stats(va, cfg["eval_days"], cfg["target"])
 
 
-def tune_profile_fixed_score(df, cfg, split):
+def tune_profile_fixed_score(cache, cfg):
     best = None
     for p in PINE_PROFILES:
-        tr, va = eval_train_valid(df, p["id"], cfg["current"], cfg, split)
+        tr, va = eval_train_valid(cache, p["id"], cfg["current"], cfg)
         rank = quality_rank(tr, va, cfg)
         if rank is None:
             continue
-        item = {"profile": p["id"], "conditions": list(cfg["current"]), "train": tr, "valid": va, "rank": rank}
+        item = {
+            "profile": p["id"],
+            "conditions": list(cfg["current"]),
+            "train": tr,
+            "valid": va,
+            "rank": rank,
+        }
         if best is None or rank > best["rank"]:
             best = item
     return best
 
 
-def tune_profile_and_score(df, cfg, split):
+def tune_profile_and_score(cache, cfg):
     best = None
     combos = list(itertools.combinations(cfg["pool"], cfg["size"]))
     for p in PINE_PROFILES:
+        pid = p["id"]
+        frames = cache[pid][cfg["eval_days"]]
+        train_frame = frames["train"]
+        valid_frame = frames["valid"]
+
+        # profileごとの候補行は既に絞られているため、ここではScore bitだけを評価。
+        train_bits = train_frame.score_bits.to_numpy(np.uint64)
+        valid_bits = valid_frame.score_bits.to_numpy(np.uint64)
+
         for combo in combos:
-            tr, va = eval_train_valid(df, p["id"], combo, cfg, split)
+            cm = condition_mask(combo)
+            tr_sel = train_frame.loc[(train_bits & cm) == cm]
+            va_sel = valid_frame.loc[(valid_bits & cm) == cm]
+            tr = stats(tr_sel, cfg["eval_days"], cfg["target"])
+            va = stats(va_sel, cfg["eval_days"], cfg["target"])
             rank = quality_rank(tr, va, cfg)
             if rank is None:
                 continue
             item = {
-                "profile": p["id"], "conditions": list(combo),
-                "train": tr, "valid": va, "rank": rank,
+                "profile": pid,
+                "conditions": list(combo),
+                "train": tr,
+                "valid": va,
+                "rank": rank,
             }
             if best is None or rank > best["rank"]:
                 best = item
@@ -759,13 +805,14 @@ def profile_text(pid):
     )
 
 
-def holdout_result(df, profile_id, conditions, cfg, holdout_start, end_date):
-    ev = select_period(df, profile_id, conditions, holdout_start, end_date, cfg["eval_days"])
+def holdout_result(cache, profile_id, conditions, cfg):
+    frame = cache[profile_id][cfg["eval_days"]]["holdout"]
+    ev = select_conditions(frame, conditions)
     return stats(ev, cfg["eval_days"], cfg["target"])
 
 
-def exact_reason_summary(df, holdout_start, end_date):
-    ev = select_period(df, "exact", [], holdout_start, end_date, 5)
+def exact_reason_summary(cache):
+    ev = cache["exact"][5]["holdout"]
     counts = {"crossBuy": 0, "trigExitShort": 0, "trendFlipUp": 0, "forceReverseBuy": 0}
     for r in ev.exact_reason.to_numpy(np.uint8):
         if r & 1:
@@ -858,30 +905,29 @@ def run(args):
     df = df.sort_values(["date", "symbol", "bar_index"]).reset_index(drop=True)
 
     split = split_dates(df, holdout_start)
+    print("building trigger cache ...", flush=True)
+    cache = build_trigger_cache(df, split, holdout_start, args.end_date)
     modes = {}
 
     for mode_id, cfg in MODE_CONFIG.items():
         print(f"tuning {mode_id} ...", flush=True)
 
         # 1) Pine原文を日足移植 + 現行Score
-        exact_hold = holdout_result(
-            df, "exact", cfg["current"], cfg, holdout_start, args.end_date
-        )
+        exact_hold = holdout_result(cache, "exact", cfg["current"], cfg)
 
         # 2) Triggerパラメータだけ過去期間で調整、Score条件は現行固定
-        tuned_fixed = tune_profile_fixed_score(df, cfg, split)
+        tuned_fixed = tune_profile_fixed_score(cache, cfg)
         if tuned_fixed is None:
             tuned_fixed = {
                 "profile": "exact", "conditions": list(cfg["current"]),
                 "train": {}, "valid": {}, "fallback": True,
             }
         fixed_hold = holdout_result(
-            df, tuned_fixed["profile"], tuned_fixed["conditions"], cfg,
-            holdout_start, args.end_date
+            cache, tuned_fixed["profile"], tuned_fixed["conditions"], cfg
         )
 
         # 3) Trigger + Score条件を過去期間だけで同時最適化
-        optimized = tune_profile_and_score(df, cfg, split)
+        optimized = tune_profile_and_score(cache, cfg)
         if optimized is None:
             optimized = {
                 "profile": tuned_fixed["profile"],
@@ -891,8 +937,7 @@ def run(args):
                 "fallback": True,
             }
         opt_hold = holdout_result(
-            df, optimized["profile"], optimized["conditions"], cfg,
-            holdout_start, args.end_date
+            cache, optimized["profile"], optimized["conditions"], cfg
         )
 
         modes[mode_id] = {
@@ -940,7 +985,7 @@ def run(args):
         "error_counts": errors,
         "base_row_count": len(df),
         "profiles": PINE_PROFILES,
-        "exact_trigger": exact_reason_summary(df, holdout_start, args.end_date),
+        "exact_trigger": exact_reason_summary(cache),
         "modes": modes,
     }
     return result
