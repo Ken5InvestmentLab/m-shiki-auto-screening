@@ -54,15 +54,15 @@ def policy_stats_for_fold(pack,blend,q,k):
 
 
 def robust_rank(fold_stats):
-    if not fold_stats: return -1e18
+    if not fold_stats: return None
     ns=[s["n"] for s in fold_stats]
-    if min(ns)<8: return -1e18
+    if min(ns)<8: return None
     av=[s["robust_avg"] for s in fold_stats]
     wr=[s["wr"] for s in fold_stats]
     hit=[s["target_rate"] for s in fold_stats]
-    # どこか1期間だけ勝つ案を排除。
+    # どこか1期間だけ勝つ案を排除。失格案は順位付け自体しない。
     if min(av)<=0 or min(wr)<.46:
-        return -1e17+min(av)
+        return None
     return (
         3.4*min(av)
         +0.45*min(wr)
@@ -84,11 +84,23 @@ def choose_walkforward(packs):
                     s,t=policy_stats_for_fold(pack,blend,q,k)
                     fs.append(s); th.append(t)
                 rank=robust_rank(fs)
+                if rank is None:
+                    continue
                 if best is None or rank>best["rank"]:
                     best={"blend_name":name,"blend":blend,"q":q,"top_per_day":k,
-                          "fold_stats":fs,"fold_thresholds":th,"rank":rank}
-    if best is None: raise RuntimeError("no walk-forward policy")
-    return best
+                          "fold_stats":fs,"fold_thresholds":th,"rank":rank,
+                          "robust_policy_found":True}
+    if best is not None:
+        return best
+
+    # 全Fold合格が無い場合は「採用候補なし」を明示し、固定の保守設定を診断用にだけ評価。
+    name="balanced"; blend=v3.BLENDS[name]; q=.99; k=1
+    fs=[]; th=[]
+    for pack in packs:
+        s,t=policy_stats_for_fold(pack,blend,q,k); fs.append(s); th.append(t)
+    return {"blend_name":name,"blend":blend,"q":q,"top_per_day":k,
+            "fold_stats":fs,"fold_thresholds":th,"rank":None,
+            "robust_policy_found":False}
 
 
 def report(r):
@@ -178,6 +190,7 @@ def run(args):
         "errors":errors,"candidate_rows":len(df),"folds":folds,
         "current_reference":v3.CURRENT_REFERENCE["stable_s6"],
         "policy":{
+            "robust_policy_found":policy.get("robust_policy_found",False),
             "blend_name":policy["blend_name"],"blend":policy["blend"],"q":policy["q"],
             "top_per_day":policy["top_per_day"],"fold_stats":policy["fold_stats"],
             "fold_thresholds":policy["fold_thresholds"],"final_threshold":threshold,
