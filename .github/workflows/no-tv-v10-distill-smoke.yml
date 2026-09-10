@@ -1,0 +1,48 @@
+name: No-TV V10 Distillation Smoke
+
+on:
+  push:
+    branches:
+      - experiment/no-tv-distillation-v10
+    paths:
+      - no_tv_v10_distill.py
+      - no_tv_v10_features.py
+      - experiments/v10_teacher_legacy_score6_bottom.csv
+      - .github/workflows/no-tv-v10-distill-smoke.yml
+  workflow_dispatch:
+
+concurrency:
+  group: no-tv-v10-distill-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-distillation-v10
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_v10_features.py no_tv_v10_distill.py
+      - name: Run V10 smoke
+        run: |
+          python no_tv_v10_distill.py \
+            --max-issues 300 \
+            --max-workers 20 \
+            --output-dir reports_no_tv_v10
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-v10-distill-smoke
+          path: reports_no_tv_v10/
+          if-no-files-found: ignore
+          retention-days: 14
