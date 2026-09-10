@@ -208,8 +208,9 @@ def build_symbol_frame(issue, chart, history_start, end_date):
         df[f"exit_date_{n}bd"]=df.date.shift(-n)
 
     use=(df.date>=history_start)&(df.date<=end_date)&df.base&df.candidate
+    local_features=[x for x in FEATURES if not x.startswith("xrank_")]
     cols=["date","bar_index","close","volume","perf_5bd","perf_10bd","perf_20bd","perf_40bd",
-          "exit_date_5bd","exit_date_10bd","exit_date_20bd","exit_date_40bd"]+FEATURES+[
+          "exit_date_5bd","exit_date_10bd","exit_date_20bd","exit_date_40bd"]+local_features+[
           "s_ema25","s_macdpos","s_stoch75","s_bb80","s_pre_down3","s_gapup","s_atr5","s_hb20"
     ]
     out=df.loc[use,cols].copy()
