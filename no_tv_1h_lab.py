@@ -260,6 +260,12 @@ def weights(y):
     return np.where(y==1,n/(2*p),n/(2*q))
 
 
+def finite_features(frame):
+    """全市場では比率計算がinfになる銘柄が混ざるため、学習前にNaNへ正規化する。"""
+    X=frame[FEATURES].apply(pd.to_numeric,errors="coerce")
+    return X.replace([np.inf,-np.inf],np.nan)
+
+
 def models():
     lin=Pipeline([("imp",SimpleImputer(strategy="median")),("sc",StandardScaler()),
                   ("m",LogisticRegression(max_iter=500,class_weight="balanced",C=.5))])
@@ -273,7 +279,7 @@ def models():
 
 
 def fit(train):
-    X=train[FEATURES]; yp=(train.perf_5bd>0).astype(int); yh=(train.perf_5bd>=.10).astype(int)
+    X=finite_features(train); yp=(train.perf_5bd>0).astype(int); yh=(train.perf_5bd>=.10).astype(int)
     lin,pos,hit,reg=models()
     lin.fit(X,yp); pos.fit(X,yp,m__sample_weight=weights(yp)); hit.fit(X,yh,m__sample_weight=weights(yh))
     reg.fit(X,train.perf_5bd.clip(-.20,.35),m__sample_weight=1+2*yh.to_numpy())
@@ -281,7 +287,7 @@ def fit(train):
 
 
 def comps(ms,f):
-    lin,pos,hit,reg=ms; X=f[FEATURES]
+    lin,pos,hit,reg=ms; X=finite_features(f)
     pp=.35*lin.predict_proba(X)[:,1]+.65*pos.predict_proba(X)[:,1]
     ph=hit.predict_proba(X)[:,1]; pr=reg.predict(X)
     return pp,ph,pr
