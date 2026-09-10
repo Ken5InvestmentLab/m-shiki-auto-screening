@@ -1,0 +1,43 @@
+name: No-TV Daily V3.1 Smoke
+
+on:
+  push:
+    branches:
+      - experiment/no-tv-research-v3
+    paths:
+      - no_tv_daily_v31.py
+      - .github/workflows/no-tv-daily-v31-smoke.yml
+  workflow_dispatch:
+
+concurrency:
+  group: no-tv-daily-v31-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-research-v3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_daily_v31.py no_tv_daily_v3.py
+      - name: Run V3.1 smoke
+        run: |
+          python no_tv_daily_v31.py             --max-issues 300             --max-workers 24             --history-days 1825             --holdout-days 365             --output-dir reports_no_tv_v31
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-daily-v31-smoke
+          path: reports_no_tv_v31/
+          if-no-files-found: ignore
+          retention-days: 14
