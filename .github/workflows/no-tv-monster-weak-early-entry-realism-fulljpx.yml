@@ -1,0 +1,49 @@
+name: No-TV Monster Weak+Early Entry Realism Full-JPX
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/no-tv-monster-weak-early-pre2026
+    paths:
+      - '.github/workflows/no-tv-monster-weak-early-entry-realism-fulljpx.yml'
+      - 'no_tv_monster_weak_early_entry_realism.py'
+      - 'no_tv_monster_weak_early_pre2026.py'
+      - 'no_tv_v4_entry_realism.py'
+      - 'no_tv_daily_v31.py'
+      - 'no_tv_daily_v3.py'
+      - 'requirements-v3.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-monster-weak-early-pre2026
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_monster_weak_early_entry_realism.py no_tv_monster_weak_early_pre2026.py no_tv_v4_entry_realism.py no_tv_daily_v31.py no_tv_daily_v3.py
+      - name: Run frozen Monster full-JPX with executable next-session entries
+        run: |
+          python no_tv_monster_weak_early_entry_realism.py \
+            --end-date 2025-12-30 \
+            --history-days 1825 \
+            --holdout-days 365 \
+            --max-workers 32 \
+            --output-dir reports_no_tv_monster_weak_early_entry_realism_fulljpx
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-monster-weak-early-entry-realism-fulljpx
+          path: reports_no_tv_monster_weak_early_entry_realism_fulljpx/
+          if-no-files-found: ignore
+          retention-days: 14
