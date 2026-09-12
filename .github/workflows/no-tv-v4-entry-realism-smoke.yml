@@ -1,0 +1,49 @@
+name: No-TV V4 Fixed Policy Entry Realism Pre-2026 Smoke
+
+on:
+  push:
+    branches:
+      - experiment/no-tv-research-v3
+    paths:
+      - no_tv_v4_entry_realism.py
+      - .github/workflows/no-tv-v4-entry-realism-smoke.yml
+  workflow_dispatch:
+
+concurrency:
+  group: no-tv-v4-entry-realism-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 140
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-research-v3
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_v4_entry_realism.py no_tv_v4_lowdof_dense.py no_tv_daily_v4_regime.py no_tv_daily_v3.py
+      - name: Run fixed-policy executable-entry audit
+        run: |
+          python no_tv_v4_entry_realism.py \
+            --end-date 2025-12-30 \
+            --max-issues 400 \
+            --max-workers 24 \
+            --history-days 1825 \
+            --holdout-days 365 \
+            --output-dir reports_no_tv_v4_entry_realism
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-v4-entry-realism-pre2026-smoke
+          path: reports_no_tv_v4_entry_realism/
+          if-no-files-found: ignore
+          retention-days: 14
