@@ -35,8 +35,7 @@ def _build_symbol_frame_nextopen(issue, chart, history_start, end_date):
     px["perf_nextopen_5bd"] = c.shift(-6) / o.shift(-1) - 1.0
     out = out.merge(px[["bar_index", "perf_nextopen_5bd"]], on="bar_index", how="left")
 
-    # Deliberately replace only the research target used by existing V4 model/stat code.
-    # Feature columns, candidate generation, regime features and policy mechanics stay unchanged.
+    # Replace only the research target used by V4 model/stat code.
     out["perf_signalclose_5bd_audit"] = out["perf_5bd"]
     out["perf_5bd"] = out["perf_nextopen_5bd"]
     return out
@@ -45,6 +44,26 @@ def _build_symbol_frame_nextopen(issue, chart, history_start, end_date):
 v3.build_symbol_frame = _build_symbol_frame_nextopen
 
 import no_tv_daily_v4_regime as v4  # noqa: E402
+
+
+# Deliberately keep the first test low-DOF and directly comparable with the
+# prior V4 fixed architecture. No holdout policy search.
+def choose_fixed(_packs):
+    return {
+        "blend_name": "balanced",
+        "blend": v3.BLENDS["balanced"],
+        "q": 0.97,
+        "top_per_day": 3,
+        "fold_stats": [],
+        "fold_thresholds": [],
+        "rank": None,
+        "robust_policy_found": True,
+        "policy_space_size": 1,
+        "selection_mode": "nextopen_native_fixed_balanced_q097_top3",
+    }
+
+
+v4.choose = choose_fixed
 
 
 def main():
