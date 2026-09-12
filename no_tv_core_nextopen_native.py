@@ -10,6 +10,9 @@ import screen_big_money as core
 # train/evaluate the model on executable next-session-open -> +5BD close returns
 # from the start, instead of training on signal-close -> +5BD and auditing later.
 # This is independent from legacy Stable/Sniper/Mega signal matching.
+#
+# First smoke intentionally keeps the policy architecture fixed and low-DOF:
+# balanced / q=0.97 / Top3. No policy search, no 2026 tuning.
 
 _orig_build_symbol_frame = v3.build_symbol_frame
 
@@ -35,7 +38,8 @@ def _build_symbol_frame_nextopen(issue, chart, history_start, end_date):
     px["perf_nextopen_5bd"] = c.shift(-6) / o.shift(-1) - 1.0
     out = out.merge(px[["bar_index", "perf_nextopen_5bd"]], on="bar_index", how="left")
 
-    # Replace only the research target used by V4 model/stat code.
+    # Deliberately replace only the research target used by existing model/stat code.
+    # Features, candidate generation and market-regime inputs stay unchanged.
     out["perf_signalclose_5bd_audit"] = out["perf_5bd"]
     out["perf_5bd"] = out["perf_nextopen_5bd"]
     return out
@@ -46,20 +50,25 @@ v3.build_symbol_frame = _build_symbol_frame_nextopen
 import no_tv_daily_v4_regime as v4  # noqa: E402
 
 
-# Deliberately keep the first test low-DOF and directly comparable with the
-# prior V4 fixed architecture. No holdout policy search.
-def choose_fixed(_packs):
+def choose_fixed(packs):
+    blend = v3.BLENDS["balanced"]
+    fold_stats = []
+    fold_thresholds = []
+    for pack in packs:
+        s, t = v4.policy_eval(pack, blend, 0.97, 3)
+        fold_stats.append(s)
+        fold_thresholds.append(t)
     return {
         "blend_name": "balanced",
-        "blend": v3.BLENDS["balanced"],
+        "blend": blend,
         "q": 0.97,
         "top_per_day": 3,
-        "fold_stats": [],
-        "fold_thresholds": [],
+        "fold_stats": fold_stats,
+        "fold_thresholds": fold_thresholds,
         "rank": None,
         "robust_policy_found": True,
         "policy_space_size": 1,
-        "selection_mode": "nextopen_native_fixed_balanced_q097_top3",
+        "selection_mode": "core_nextopen_native_fixed_balanced_q097_top3",
     }
 
 
