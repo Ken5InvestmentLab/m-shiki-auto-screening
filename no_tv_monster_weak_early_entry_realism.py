@@ -74,6 +74,50 @@ def _metric(events: pd.DataFrame, col: str):
     }
 
 
+def _calendar_dependence(events: pd.DataFrame, col: str):
+    if col not in events.columns or "date" not in events.columns:
+        return None
+    x = events[["date", col]].copy()
+    x[col] = pd.to_numeric(x[col], errors="coerce")
+    x = x.dropna()
+    if x.empty:
+        return None
+    d = pd.to_datetime(x["date"], errors="coerce")
+    x = x[d.notna()].copy()
+    d = pd.to_datetime(x["date"])
+    x["month"] = d.dt.strftime("%Y-%m")
+    iso = d.dt.isocalendar()
+    x["iso_week"] = iso.year.astype(str) + "-W" + iso.week.astype(str).str.zfill(2)
+
+    def summarize(group_col):
+        rows = []
+        for key, g in x.groupby(group_col, sort=True):
+            v = g[col].to_numpy(float)
+            rows.append({
+                group_col: str(key),
+                "n": int(len(v)),
+                "avg": float(np.mean(v)),
+                "median": float(np.median(v)),
+                "wr": float(np.mean(v > 0)),
+            })
+        return rows
+
+    full = x[col].to_numpy(float)
+    monthly = summarize("month")
+    weekly = summarize("iso_week")
+    month_means = sorted((r["avg"], r["month"]) for r in monthly)
+    week_means = sorted((r["avg"], r["iso_week"]) for r in weekly)
+    return {
+        "n": int(len(full)),
+        "monthly": monthly,
+        "weekly": weekly,
+        "worst_month": {"month": month_means[0][1], "avg": month_means[0][0]} if month_means else None,
+        "best_month": {"month": month_means[-1][1], "avg": month_means[-1][0]} if month_means else None,
+        "worst_week": {"iso_week": week_means[0][1], "avg": week_means[0][0]} if week_means else None,
+        "best_week": {"iso_week": week_means[-1][1], "avg": week_means[-1][0]} if week_means else None,
+    }
+
+
 def _stats_with_entry_realism(events):
     base = _orig_stats(events)
     extra = {}
@@ -87,6 +131,9 @@ def _stats_with_entry_realism(events):
             extra[col] = m
     if extra:
         base["entry_realism"] = extra
+    dep = _calendar_dependence(events, "perf_next_open_5bd")
+    if dep is not None:
+        base["next_open_5bd_calendar_dependence"] = dep
     return base
 
 
