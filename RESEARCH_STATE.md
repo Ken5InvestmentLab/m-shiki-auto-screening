@@ -62,6 +62,27 @@ Interpretation:
 - Next priority for Core: run the exact fixed `balanced/q=.97/Top3` architecture on a much larger/full JPX universe with no policy search, then audit month/week concentration, Top1/Top3 exclusion, +10/+20/+50, loss10/loss20. If it survives, promote V4 Dense Low-DOF to serious Core candidate.
 - Do not alter q=.97 or Top3 using 2026.
 
+## 2026-09-12 V4 executable-entry audit
+Implementation: `no_tv_v4_entry_realism.py`
+Workflow: `.github/workflows/no-tv-v4-entry-realism-smoke.yml`
+Run: `34665843274` at commit `18f957bd582436029aa51228da3133a554ddf199`.
+
+The already-selected fixed Core policy (`balanced`, q=0.97, Top3/day) was re-evaluated using executable next-session entries without changing thresholds or using 2026 for tuning. Same pre-2026 400-issue smoke universe: Yahoo usable 250, candidate rows 50,141, holdout n=70.
+
+Holdout results:
+- Original signal-close research return: avg +2.633%, robust avg +2.312%, median +1.174%, win 55.7%.
+- Production-baseline Next Open -> 5BD close: avg +2.566%, robust avg +2.434%, median +2.762%, win 60.0%.
+- Next Open +10% 17.1%, +20% 5.7%, +50% 0.0%, loss10 10.0%, loss20 1.4%.
+- Next Open Top1 winner excluded avg +2.087%; Top3 winners excluded avg +1.148%.
+- Alternative Next Open -> original signal t+5 close: avg +2.312%, robust avg +2.034%, median +1.084%, win 54.3%, Top3-excluded avg +0.801%.
+- Next Close -> 5BD close: avg +2.986%, robust avg +2.770%, median +2.224%, win 60.0%, Top3-excluded avg +1.704%.
+
+Interpretation:
+- The Core headline did NOT disappear when same-close execution bias was removed. Under the preferred Next Open baseline, average changed only from +2.633% to +2.566%, while median and win rate improved.
+- Top3-excluded Next Open avg remains positive at +1.148%, so the holdout is not solely one to three winners.
+- Tail risk remains meaningful: Next Open loss10 rises to 10.0% and the worst trade is about -41.6%, so Core still needs tail-risk/regime work before production promotion.
+- This materially clears the execution-realism gate for the 400-issue smoke sample, but it does NOT clear the universe-size/month-concentration gate. Next step remains a fixed-policy larger/full-JPX validation with Next Open as the primary metric; no retuning of q=.97/Top3.
+
 ## Monster next step
 V31 code confirms the model itself can remain fixed as the Three-head base; most search freedom is in blend/q/Top/day. For V29 reconstruction, prefer a fixed-policy probe around the historical `min98` idea rather than reopening the full V31 176-policy search. Do not infer V29 success from 2026; validate on pre-2026/purge-safe periods first.
 
