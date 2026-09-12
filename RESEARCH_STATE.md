@@ -83,6 +83,33 @@ Interpretation:
 - Tail risk remains meaningful: Next Open loss10 rises to 10.0% and the worst trade is about -41.6%, so Core still needs tail-risk/regime work before production promotion.
 - This materially clears the execution-realism gate for the 400-issue smoke sample, but it does NOT clear the universe-size/month-concentration gate. Next step remains a fixed-policy larger/full-JPX validation with Next Open as the primary metric; no retuning of q=.97/Top3.
 
+## 2026-09-12 score-tail diagnostic (diagnostic only, not a new cutoff)
+Source: artifact from run `34665843274`, all 70 holdout events. This diagnostic uses the existing signal-close `perf_5bd` because the artifact did not contain per-event Next-Open returns; therefore it must NOT be treated as a production-entry rule test.
+
+Observed score quartiles:
+- Q1 score ~70.42-71.23: n=18, avg +0.33%, median +0.32%, win 50.0%, loss10 11.1%, loss20 0%.
+- Q2 score ~71.23-72.73: n=17, avg +4.33%, median +2.75%, win 58.8%, loss10 5.9%, loss20 5.9%.
+- Q3 score ~72.73-77.29: n=17, avg +0.96%, median -0.58%, win 47.1%, loss10 0%, loss20 0%.
+- Q4 score ~77.29-89.58: n=18, avg +4.92%, median +4.28%, win 66.7%, loss10 0%, loss20 0%.
+
+Additional observations:
+- Highest score quartile retained strong average and had no <=-10% loss in this smoke holdout.
+- Lowest score quartile was weak (+0.33% avg) and had the highest loss10 rate (11.1%).
+- However score/return is not monotonic because Q3 underperformed Q2, so this does NOT justify inventing a new score cutoff from holdout data.
+- Regime diagnostic: Bear n=37 avg +3.10%, median +1.95%, win 59.5%; Bull n=30 avg +2.77%, median +1.32%, win 56.7%; Neutral n=3 avg -4.48% and is too small for inference.
+- Worst signal-close trade was 2025-03-24, code 2459, -38.84%. Next-worst losses were much smaller (~-13.3%, -11.3%). This supports investigating a catastrophic-tail guard, but only with pre-registered/simple features and outer validation.
+
+Conclusion: ranking information appears potentially useful for risk stratification, but do not tune a holdout-derived score floor. Full-JPX fixed-policy validation remains the higher-priority gate.
+
+## 2026-09-12 strict fixed full-JPX validation
+Branch: `experiment/no-tv-v4-fulljpx-fixed`
+Fixed policy: `balanced / q=.97 / Top3`; no policy search and no 2026 tuning.
+Workflow: `.github/workflows/no-tv-v4-fulljpx-fixed.yml`
+Run: `34673663238` at commit `a2b425d969075de5af94d027a3705ef15e8cc6b4`.
+Status at last check: in progress in `Run strict fixed full-JPX pre-2026 validation` step. Compile/setup already passed.
+
+This run is the current Core gate. Do not alter q/Top/day after seeing its result. Primary production-realistic metric is Next Open -> 5BD close, followed by median, win rate, +10/+20/+50, -10/-20, Top1/Top3 exclusion, and month/week concentration.
+
 ## Monster next step
 V31 code confirms the model itself can remain fixed as the Three-head base; most search freedom is in blend/q/Top/day. For V29 reconstruction, prefer a fixed-policy probe around the historical `min98` idea rather than reopening the full V31 176-policy search. Do not infer V29 success from 2026; validate on pre-2026/purge-safe periods first.
 
