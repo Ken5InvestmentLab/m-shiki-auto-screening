@@ -1,0 +1,50 @@
+name: No-TV Core NextOpen Native Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/no-tv-core-nextopen-native
+    paths:
+      - '.github/workflows/no-tv-core-nextopen-native-smoke.yml'
+      - 'no_tv_core_nextopen_native.py'
+      - 'no_tv_daily_v4_regime.py'
+      - 'no_tv_daily_v3.py'
+      - 'independent_daily_lab_v2.py'
+      - 'screen_big_money.py'
+      - 'requirements-v3.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: experiment/no-tv-core-nextopen-native
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-v3.txt
+      - run: python -m pip install -r requirements-v3.txt
+      - run: python -m py_compile no_tv_core_nextopen_native.py no_tv_daily_v4_regime.py no_tv_daily_v3.py independent_daily_lab_v2.py screen_big_money.py
+      - name: Run next-open-native Core pre-2026 400-issue smoke
+        run: |
+          python no_tv_core_nextopen_native.py \
+            --end-date 2025-12-30 \
+            --history-days 1825 \
+            --holdout-days 365 \
+            --max-workers 24 \
+            --max-issues 400 \
+            --output-dir reports_no_tv_core_nextopen_native_smoke
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: no-tv-core-nextopen-native-smoke
+          path: reports_no_tv_core_nextopen_native_smoke/
+          if-no-files-found: error
+          retention-days: 14
