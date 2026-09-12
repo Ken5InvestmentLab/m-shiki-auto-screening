@@ -102,15 +102,36 @@ def _calendar_dependence(events: pd.DataFrame, col: str):
             })
         return rows
 
+    def leave_one_out(group_col):
+        rows = []
+        for key in sorted(x[group_col].unique()):
+            v = x.loc[x[group_col] != key, col].to_numpy(float)
+            rows.append({group_col: str(key), "n": int(len(v)), "avg": float(np.mean(v)) if len(v) else None})
+        return rows
+
     full = x[col].to_numpy(float)
     monthly = summarize("month")
     weekly = summarize("iso_week")
     month_means = sorted((r["avg"], r["month"]) for r in monthly)
     week_means = sorted((r["avg"], r["iso_week"]) for r in weekly)
+    loo_month = leave_one_out("month")
+    loo_week = leave_one_out("iso_week")
+    loo_month_valid = [r for r in loo_month if r["avg"] is not None]
+    loo_week_valid = [r for r in loo_week if r["avg"] is not None]
+    months_ge5 = [r for r in monthly if r["n"] >= 5]
+    weeks_ge3 = [r for r in weekly if r["n"] >= 3]
     return {
         "n": int(len(full)),
         "monthly": monthly,
         "weekly": weekly,
+        "positive_month_share": float(np.mean([r["avg"] > 0 for r in monthly])) if monthly else None,
+        "positive_month_share_n_ge_5": float(np.mean([r["avg"] > 0 for r in months_ge5])) if months_ge5 else None,
+        "positive_week_share_n_ge_3": float(np.mean([r["avg"] > 0 for r in weeks_ge3])) if weeks_ge3 else None,
+        "leave_one_month_out": loo_month,
+        "leave_one_week_out": loo_week,
+        "leave_one_month_out_min_avg": min((r["avg"] for r in loo_month_valid), default=None),
+        "leave_one_month_out_max_avg": max((r["avg"] for r in loo_month_valid), default=None),
+        "leave_one_week_out_min_avg": min((r["avg"] for r in loo_week_valid), default=None),
         "worst_month": {"month": month_means[0][1], "avg": month_means[0][0]} if month_means else None,
         "best_month": {"month": month_means[-1][1], "avg": month_means[-1][0]} if month_means else None,
         "worst_week": {"iso_week": week_means[0][1], "avg": week_means[0][0]} if week_means else None,
