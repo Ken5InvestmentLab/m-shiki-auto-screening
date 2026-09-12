@@ -9,9 +9,9 @@ on:
       - '.github/workflows/no-tv-monster-weak-early-entry-realism-fulljpx.yml'
       - 'no_tv_monster_weak_early_entry_realism.py'
       - 'no_tv_monster_weak_early_pre2026.py'
-      - 'no_tv_v4_entry_realism.py'
       - 'no_tv_daily_v31.py'
       - 'no_tv_daily_v3.py'
+      - 'screen_big_money.py'
       - 'requirements-v3.txt'
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-v3.txt
       - run: python -m pip install -r requirements-v3.txt
-      - run: python -m py_compile no_tv_monster_weak_early_entry_realism.py no_tv_monster_weak_early_pre2026.py no_tv_v4_entry_realism.py no_tv_daily_v31.py no_tv_daily_v3.py
+      - run: python -m py_compile no_tv_monster_weak_early_entry_realism.py no_tv_monster_weak_early_pre2026.py no_tv_daily_v31.py no_tv_daily_v3.py screen_big_money.py
       - name: Run frozen Monster full-JPX with executable next-session entries
         run: |
           python no_tv_monster_weak_early_entry_realism.py \
