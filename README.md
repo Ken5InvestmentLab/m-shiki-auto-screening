@@ -8,6 +8,8 @@
 - GitHub Actions側のcron scheduleは使わず、手動実行またはGASからの`workflow_dispatch`で起動します。
 - Discord Webhookはコードに保存せず、GitHub Secretsの`DISCORD_WEBHOOK_URL`に設定します。
 - 通知は最大20件です。条件を満たす銘柄がない日も0件として要約通知します。
+- 任意の2つめのWebhookは`DISCORD_WEBHOOK_URL_2`に設定します。銘柄が検出された日だけ、1つめと同じ要約・銘柄詳細を並行して送信します。0件の日は2つめへ送信しません。
+- 2つめが未設定・空欄なら従来どおり1つめだけに通知します。同じURLを両方に設定した場合は二重送信しません。片方の送信が失敗してももう片方への送信を試み、失敗があれば実行をエラーとして報告します。
 - EmbedタイトルからTradingViewへ直接移動できます。
 
 ## 検出ロジック
@@ -31,14 +33,16 @@
 
 ```powershell
 py -3 -m pip install -r requirements.txt
-py -3 screen_big_money.py --dry-run --no-wait --allow-stale-data
+py -3 screen_entry.py --dry-run --no-wait --allow-stale-data
 ```
 
 Discordへ投稿する場合:
 
 ```powershell
 $env:DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/..."
-py -3 screen_big_money.py --no-wait --allow-stale-data
+# 任意: 銘柄検出時だけ通知する2つめのWebhook
+$env:DISCORD_WEBHOOK_URL_2 = "https://discord.com/api/webhooks/..."
+py -3 screen_entry.py --no-wait --allow-stale-data
 ```
 
 ## GitHub Actions設定
@@ -46,6 +50,15 @@ py -3 screen_big_money.py --no-wait --allow-stale-data
 1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
 2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で待機をスキップします。
 3. 過去期間をまとめて確認する手動実行だけ`lookback_days`を指定できます。通常の自動実行は既定値`0`のまま当日限定です。
+4. 2つめを有効にするときは、同じ画面で`DISCORD_WEBHOOK_URL_2`という名前のRepository secretを追加し、新しいWebhook URLを保存します。コード変更やGAS設定の変更は不要で、次回実行から銘柄検出時だけ通知します。設定するまではSecretを作らなくて構いません。
+
+## 通知処理のテスト
+
+```powershell
+py -3 -m unittest discover -s tests -v
+```
+
+外部へ送信せず、検出あり・0件・2つめ未設定・並行送信・片方の送信失敗・dry-runを確認します。`--dry-run`では両方のWebhookへ送信せず、送信予定の設定名と通知内容を表示します。
 
 ## GAS起動設定
 

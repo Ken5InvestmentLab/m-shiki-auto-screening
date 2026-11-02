@@ -959,20 +959,58 @@ def post_webhook(webhook_url: str, payload: dict[str, Any], files: list[tuple[st
     response.raise_for_status()
 
 
-def post_to_discord(result: RunResult, webhook_url: str, output_paths: tuple[Path, Path, Path], delay_seconds: int, dry_run: bool) -> None:
+def post_to_discord(
+    result: RunResult,
+    webhook_url: str,
+    output_paths: tuple[Path, Path, Path],
+    delay_seconds: int,
+    dry_run: bool,
+    detection_webhook_url: str = "",
+) -> None:
     data_stale = bool(result.notes and result.target_latest_date and result.target_latest_date < now_jst().date().isoformat())
     summary_payload = {"embeds": [build_summary_embed(result, delay_seconds, data_stale=data_stale)]}
+    embeds = build_candidate_embeds(result.candidates)
+    payloads = [summary_payload] + [
+        {"embeds": embeds[start : start + 10]} for start in range(0, len(embeds), 10)
+    ]
+    targets = [("DISCORD_WEBHOOK_URL", webhook_url)]
+    detection_webhook_url = detection_webhook_url.strip()
+    if not detection_webhook_url:
+        print("DISCORD_WEBHOOK_URL_2: skipped (not configured)", flush=True)
+    elif not result.candidates:
+        print("DISCORD_WEBHOOK_URL_2: skipped (no detections)", flush=True)
+    elif detection_webhook_url == webhook_url:
+        print("DISCORD_WEBHOOK_URL_2: skipped (same destination as primary)", flush=True)
+    else:
+        targets.append(("DISCORD_WEBHOOK_URL_2", detection_webhook_url))
 
     if dry_run:
+        print("Dry run destinations: " + ", ".join(name for name, _ in targets), flush=True)
         print(json.dumps(summary_payload, ensure_ascii=False, indent=2))
-        for embed in build_candidate_embeds(result.candidates):
+        for embed in embeds:
             print(json.dumps(embed, ensure_ascii=False, indent=2))
         return
 
-    post_webhook(webhook_url, summary_payload)
-    embeds = build_candidate_embeds(result.candidates)
-    for start in range(0, len(embeds), 10):
-        post_webhook(webhook_url, {"embeds": embeds[start : start + 10]})
+    def send_payloads(url: str) -> None:
+        for payload in payloads:
+            post_webhook(url, payload)
+
+    # Destinations run independently; preserve summary/detail ordering within each.
+    failures = []
+    with ThreadPoolExecutor(max_workers=len(targets)) as executor:
+        futures = {executor.submit(send_payloads, url): name for name, url in targets}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                future.result()
+            except Exception:
+                # Request exception text can contain the secret webhook URL.
+                failures.append(name)
+                print(f"{name}: delivery failed", file=sys.stderr, flush=True)
+            else:
+                print(f"{name}: sent {len(payloads)} message(s)", flush=True)
+    if failures:
+        raise RuntimeError("Discord delivery failed: " + ", ".join(sorted(failures))) from None
 
 
 def retry_until_fresh(args: argparse.Namespace, config: ScreeningConfig) -> RunResult:
@@ -1030,11 +1068,12 @@ def main() -> int:
     output_paths = write_outputs(result, Path(args.output_dir))
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+    detection_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL_2", "").strip()
     if not webhook_url and not args.dry_run:
         print("DISCORD_WEBHOOK_URL is required unless --dry-run is used.", file=sys.stderr)
         return 2
 
-    post_to_discord(result, webhook_url, output_paths, delay_seconds, args.dry_run)
+    post_to_discord(result, webhook_url, output_paths, delay_seconds, args.dry_run, detection_webhook_url)
     print(
         json.dumps(
             {
