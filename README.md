@@ -60,6 +60,12 @@ py -3 -m unittest discover -s tests -v
 
 外部へ送信せず、検出あり・0件・2つめ未設定・並行送信・片方の送信失敗・dry-runを確認します。`--dry-run`では両方のWebhookへ送信せず、送信予定の設定名と通知内容を表示します。
 
+## Webhook2への仕様説明の手動送信
+
+Actionsの`Webhook2 仕様説明を送信`を手動実行すると、`scripts/post_webhook2_guide.py`の説明文をWebhook2だけへ1件のEmbedとして送信し、作成したメッセージを読み戻して照合します。通常のスクリーニングとは独立し、自動では起動しません。
+
+文面だけを確認する場合は`py -3 scripts/post_webhook2_guide.py --dry-run`を使います。送信は自動再試行しません。作成済みメッセージIDがログに残っている場合、確認処理の失敗を理由に再実行すると二重投稿になるため、既存メッセージを確認してください。
+
 ## GAS起動設定
 
 専用GASプロジェクト: https://script.google.com/d/12cN3Fd_mVrtC-0UIa9QlLP-jHtOu8gLgUZMsLxcVAFg5la9Pl99w8Tqt/edit

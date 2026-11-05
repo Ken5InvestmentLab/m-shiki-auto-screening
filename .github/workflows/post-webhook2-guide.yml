@@ -1,0 +1,29 @@
+name: Webhook2 仕様説明を送信
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webhook2-guide-delivery
+  cancel-in-progress: false
+
+jobs:
+  send-guide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Validate guide payload without sending
+        run: python scripts/post_webhook2_guide.py --dry-run
+      - name: Send one guide embed to Webhook2 and verify message
+        env:
+          DISCORD_WEBHOOK_URL_2: ${{ secrets.DISCORD_WEBHOOK_URL_2 }}
+        run: python scripts/post_webhook2_guide.py

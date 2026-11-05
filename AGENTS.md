@@ -6,11 +6,16 @@
 
 ## Build and test
 
-- Before posting to Discord, verify changes with `py -3 -m py_compile screen_big_money.py screen_entry.py`, `py -3 -m unittest discover -s tests -v`, and `py -3 screen_entry.py --dry-run --no-wait --allow-stale-data`. Use `screen_entry.py`, as CI does, to retain JPX parsing and data validity guards.
+- Before posting screening results to Discord, verify changes with `py -3 -m py_compile screen_big_money.py screen_entry.py`, `py -3 -m unittest discover -s tests -v`, and `py -3 screen_entry.py --dry-run --no-wait --allow-stale-data`. Use `screen_entry.py`, as CI does, to retain JPX parsing and data validity guards.
 - Keep each destination's summary/detail order while sending to destinations independently. Test delivery failures without real Discord posts; never include webhook URLs in logs or exception messages.
 - For historical notification tests, pass `--run-at-jst YYYY-MM-DDTHH:MM:SS`; this also screens only OHLCV bars on or before that date unless `--as-of-date` is supplied.
 - Keep the production and workflow `lookback_days` default at `0` for same-day-only notifications; use a nonzero manual input only for an explicitly requested historical backfill.
 - Generated files under `reports/` are local run artifacts and should stay untracked.
+
+## Manual guide delivery
+
+- For an explicitly requested Webhook2 guide post, use the manual-only `post-webhook2-guide.yml` workflow. Validate its script with `--dry-run` and the unit tests; do not run the market screener to send static documentation.
+- The guide sender uses only `DISCORD_WEBHOOK_URL_2`, posts once with `wait=true`, and reads the returned message ID back for content verification. If a receipt exists but verification fails, inspect that message; do not rerun the POST to repair a read-back failure.
 
 ## GAS automation
 
