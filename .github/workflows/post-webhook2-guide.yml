@@ -2,6 +2,12 @@ name: Webhook2 仕様説明を送信
 
 on:
   workflow_dispatch:
+    inputs:
+      message_id:
+        description: "Existing guide message ID to edit. Blank creates a new guide."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -26,4 +32,5 @@ jobs:
       - name: Send one guide embed to Webhook2 and verify message
         env:
           DISCORD_WEBHOOK_URL_2: ${{ secrets.DISCORD_WEBHOOK_URL_2 }}
+          GUIDE_MESSAGE_ID: ${{ inputs.message_id }}
         run: python scripts/post_webhook2_guide.py

@@ -38,7 +38,7 @@ quietより弱い反応も含め、横ばい圏で変化の兆しを拾った銘
 
 def build_payload() -> dict:
     embed = {
-        "title": "📊 M式自動スクリーニングについて",
+        "title": "📊 大口仕込み自動スクリーニングについて",
         "description": DESCRIPTION,
         "color": 0x2DD4BF,
     }
@@ -50,7 +50,10 @@ def build_payload() -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--edit-message-id", default=os.environ.get("GUIDE_MESSAGE_ID", ""))
     args = parser.parse_args(argv)
+    if args.edit_message_id and not args.edit_message_id.isdigit():
+        parser.error("--edit-message-id must contain only digits")
     payload = build_payload()
     if args.dry_run:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -65,13 +68,37 @@ def main(argv: list[str] | None = None) -> int:
     query["wait"] = "true"
     post_url = urlunsplit(parts._replace(query=urlencode(query)))
     headers = {"Content-Type": "application/json", "User-Agent": "M-Shiki-Guide/1.0"}
-    request = Request(post_url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+    method = "POST"
+    if args.edit_message_id:
+        post_url = urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/messages/" + args.edit_message_id))
+        try:
+            with urlopen(Request(post_url, headers=headers), timeout=30) as response:
+                current = json.load(response)
+            expected = payload["embeds"][0]
+            current_embeds = current.get("embeds", [])
+            if (
+                str(current.get("id")) != args.edit_message_id
+                or len(current_embeds) != 1
+                or current_embeds[0].get("title") not in (
+                    "📊 M式自動スクリーニングについて", expected["title"]
+                )
+                or current_embeds[0].get("description") != expected["description"]
+                or current_embeds[0].get("color") != expected["color"]
+            ):
+                raise ValueError("Existing message is not the expected guide.")
+            # Preserve the existing embed and change only the requested title.
+            payload["embeds"] = [dict(current_embeds[0], title=expected["title"])]
+        except (HTTPError, URLError, OSError, ValueError, AttributeError, TypeError):
+            print("Webhook2 existing guide could not be verified; no edit or new post.", file=sys.stderr)
+            return 1
+        method = "PATCH"
+    request = Request(post_url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, method=method)
     try:
         # Never retry a POST: a timeout may occur after Discord created the message.
         with urlopen(request, timeout=30) as response:
             message = json.load(response)
     except (HTTPError, URLError, OSError, ValueError):
-        print("Webhook2 POST failed or its receipt is unknown; no automatic resend.", file=sys.stderr)
+        print(f"Webhook2 {method} failed or its receipt is unknown; no automatic resend.", file=sys.stderr)
         return 1
 
     if not isinstance(message, dict):
@@ -79,10 +106,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     message_id = str(message.get("id", ""))
     channel_id = str(message.get("channel_id", ""))
-    if not message_id.isdigit() or not channel_id.isdigit():
+    if not message_id.isdigit() or not channel_id.isdigit() or (args.edit_message_id and message_id != args.edit_message_id):
         print("Webhook2 response has no valid message receipt; do not resend automatically.", file=sys.stderr)
         return 1
-    print(f"Webhook2 created message_id={message_id} channel_id={channel_id}", flush=True)
+    action = "updated" if args.edit_message_id else "created"
+    print(f"Webhook2 {action} message_id={message_id} channel_id={channel_id}", flush=True)
 
     read_url = urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/messages/" + message_id))
     try:

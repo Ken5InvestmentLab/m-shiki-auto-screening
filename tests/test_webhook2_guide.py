@@ -54,6 +54,32 @@ class GuideDeliveryTests(unittest.TestCase):
             self.assertEqual(guide.main([]), 2)
         self.http.assert_not_called()
 
+    def test_existing_guide_is_read_then_patched_and_verified_without_post(self):
+        old_embed = dict(self.message["embeds"][0], title="📊 M式自動スクリーニングについて", type="rich")
+        old = dict(self.message, embeds=[old_embed])
+        updated = dict(self.message, embeds=[dict(old_embed, title=guide.build_payload()["embeds"][0]["title"])])
+        self.http.side_effect = [reply(old), reply(updated), reply(updated)]
+        self.assertEqual(guide.main(["--edit-message-id", "123456"]), 0)
+        calls = self.http.call_args_list
+        self.assertEqual([call.args[0].get_method() for call in calls], ["GET", "PATCH", "GET"])
+        self.assertTrue(all(call.args[0].full_url == WEBHOOK + "/messages/123456" for call in calls))
+        patched_embed = json.loads(calls[1].args[0].data)["embeds"][0]
+        self.assertEqual(patched_embed, updated["embeds"][0])
+        self.assertIn("updated message_id=123456", self.stdout.getvalue())
+        self.assertIn("VERIFIED", self.stdout.getvalue())
+
+    def test_missing_existing_message_never_falls_back_to_new_post(self):
+        self.http.side_effect = HTTPError(WEBHOOK, 404, WEBHOOK, {}, None)
+        self.assertEqual(guide.main(["--edit-message-id", "123456"]), 1)
+        self.assertEqual(self.http.call_count, 1)
+        self.assertEqual(self.http.call_args.args[0].get_method(), "GET")
+
+    def test_unrelated_existing_message_is_not_modified(self):
+        unrelated = dict(self.message, embeds=[dict(self.message["embeds"][0], description="unrelated message")])
+        self.http.return_value = reply(unrelated)
+        self.assertEqual(guide.main(["--edit-message-id", "123456"]), 1)
+        self.assertEqual(self.http.call_count, 1)
+
     def test_http_failure_never_retries_or_logs_webhook_url(self):
         self.http.side_effect = HTTPError(WEBHOOK, 404, WEBHOOK, {}, None)
         self.assertEqual(guide.main([]), 1)
