@@ -1,4 +1,4 @@
-name: M式自動スクリーニング
+name: 大口仕込み自動スクリーニング
 
 on:
   workflow_dispatch:

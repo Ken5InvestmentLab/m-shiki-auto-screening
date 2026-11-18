@@ -75,6 +75,7 @@ class DiscordNotificationTests(unittest.TestCase):
         primary = self.payloads(PRIMARY)
         self.assertEqual(primary, self.payloads(SECONDARY))
         self.assertEqual(len(primary), 2)
+        self.assertEqual(primary[0]["embeds"][0]["title"], "大口仕込み自動スクリーニング")
         self.assertEqual(primary[0]["embeds"][0]["description"], "1銘柄を検出")
         self.assertEqual(primary[1]["embeds"][0]["title"], "#1 1000 テスト銘柄0")
         self.assertIn("TSE%3A1000", primary[1]["embeds"][0]["url"])
@@ -112,7 +113,7 @@ class DiscordNotificationTests(unittest.TestCase):
         rendezvous = threading.Barrier(2, timeout=5)
 
         def accept(url, *, data, **kwargs):
-            if json.loads(data["payload_json"])["embeds"][0]["title"] == "M式自動スクリーニング":
+            if not json.loads(data["payload_json"])["embeds"][0]["title"].startswith("#"):
                 rendezvous.wait()
             return response()
 

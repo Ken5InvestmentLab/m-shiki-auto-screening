@@ -1,5 +1,9 @@
 # Project Guidance
 
+## Naming
+
+- Use `大口仕込み自動スクリーニング` consistently in user-facing text, including Discord notifications, workflow names, and documentation.
+
 ## Secrets
 
 - Do not commit Discord webhook URLs or other credentials. Use environment variables locally and same-named GitHub Actions secrets: `DISCORD_WEBHOOK_URL` is required for normal notifications; optional `DISCORD_WEBHOOK_URL_2` receives the same summary/details only when `result.candidates` is nonempty. An unset secondary must not affect the primary's zero-result summary.

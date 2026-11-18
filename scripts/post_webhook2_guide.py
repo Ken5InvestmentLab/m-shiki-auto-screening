@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     query = dict(parse_qsl(parts.query))
     query["wait"] = "true"
     post_url = urlunsplit(parts._replace(query=urlencode(query)))
-    headers = {"Content-Type": "application/json", "User-Agent": "M-Shiki-Guide/1.0"}
+    headers = {"Content-Type": "application/json", "User-Agent": "Big-Money-Screening-Guide/1.0"}
     method = "POST"
     if args.edit_message_id:
         post_url = urlunsplit(parts._replace(path=parts.path.rstrip("/") + "/messages/" + args.edit_message_id))

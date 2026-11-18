@@ -885,7 +885,7 @@ def render_html(result: RunResult) -> str:
 
 
 def build_summary_embed(result: RunResult, delay_seconds: int, data_stale: bool = False) -> dict[str, Any]:
-    title = "M式自動スクリーニング"
+    title = "大口仕込み自動スクリーニング"
     description = "条件通過なし" if not result.candidates else f"{result.posted_count}銘柄を検出"
     if data_stale:
         description = "Yahoo日足データが本日分に更新されていない可能性があります"

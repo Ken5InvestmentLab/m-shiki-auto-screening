@@ -207,7 +207,7 @@ def write_outputs(result: dict, output_dir: Path) -> tuple[Path, Path]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Recalculate M-shiki detections for a historical date range."
+        description="大口仕込み自動スクリーニングの検出結果を指定した期間で再計算します。"
     )
     parser.add_argument("--start-date", type=parse_iso_date, default="2026-01-01")
     parser.add_argument("--end-date", type=parse_iso_date)

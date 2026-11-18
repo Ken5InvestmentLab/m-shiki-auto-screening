@@ -1,4 +1,4 @@
-# M式自動スクリーニング
+# 大口仕込み自動スクリーニング
 
 東証内国株式を対象に、Yahoo Financeの日足OHLCVから「上がる前の大口仕込み風反応」を日次検出し、判定日当日に反応が出た銘柄をDiscord WebhookへEmbed通知します。
 
@@ -48,7 +48,7 @@ py -3 screen_entry.py --no-wait --allow-stale-data
 ## GitHub Actions設定
 
 1. Repository Settings -> Secrets and variables -> Actions -> New repository secret で`DISCORD_WEBHOOK_URL`を設定します。
-2. Actionsタブから`M式自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で待機をスキップします。
+2. Actionsタブから`大口仕込み自動スクリーニング`を手動実行して、Discord投稿とTradingViewリンクを確認します。手動実行は既定で待機をスキップします。
 3. 過去期間をまとめて確認する手動実行だけ`lookback_days`を指定できます。通常の自動実行は既定値`0`のまま当日限定です。
 4. 2つめを有効にするときは、同じ画面で`DISCORD_WEBHOOK_URL_2`という名前のRepository secretを追加し、新しいWebhook URLを保存します。コード変更やGAS設定の変更は不要で、次回実行から銘柄検出時だけ通知します。設定するまではSecretを作らなくて構いません。
 
